@@ -1,26 +1,36 @@
-const express = require('express');
+const express = require("express");
 
 const router = express.Router();
-const swingState = require('../state/swingState');
-const swingLoop = require('../jobs/swingLoop');
-const { getSwingCandidates } = require('../services/swingScanner');
-const { evaluateSwingSignals, getIndexReturn } = require('../indicators/swingSignals');
-const { totalCapitalDeployed, openPositionCount } = require('../trading/swingPositionManager');
-const S = require('../config/swingConstants');
-const { requireKey, requirePrivate, PUBLIC_MODE } = require('../middleware/auth');
+const swingState = require("../state/swingState");
+const swingLoop = require("../jobs/swingLoop");
+const { getSwingCandidates } = require("../services/swingScanner");
+const {
+  evaluateSwingSignals,
+  getIndexReturn,
+} = require("../indicators/swingSignals");
+const {
+  totalCapitalDeployed,
+  openPositionCount,
+} = require("../trading/swingPositionManager");
+const S = require("../config/swingConstants");
+const {
+  requireKey,
+  requirePrivate,
+  PUBLIC_MODE,
+} = require("../middleware/auth");
 
-router.get('/health', (req, res) => {
+router.get("/health", (req, res) => {
   const state = swingState.getState();
   res.json({
     ok: true,
     running: swingLoop.isRunning(),
     lastScanDate: state.lastScanDate,
     openPositions: openPositionCount(),
-    scheduledAt: `${String(S.SWING_SCAN_TIME.h).padStart(2, '0')}:${String(S.SWING_SCAN_TIME.m).padStart(2, '0')} IST`,
+    scheduledAt: `${String(S.SWING_SCAN_TIME.h).padStart(2, "0")}:${String(S.SWING_SCAN_TIME.m).padStart(2, "0")} IST`,
   });
 });
 
-router.get('/positions', requirePrivate, (req, res) => {
+router.get("/positions", requirePrivate, (req, res) => {
   const open = swingState.openPositionsList();
 
   // In PUBLIC_MODE without a key, strip quantities and capital figures. The
@@ -37,9 +47,10 @@ router.get('/positions', requirePrivate, (req, res) => {
         partialBooked: p.partialBooked,
         barsHeld: p.barsHeld,
         signals: p.signals,
-        openRMultiple: p.riskPerShare > 0
-          ? Number(((p.highest - p.entry) / p.riskPerShare).toFixed(2))
-          : null,
+        openRMultiple:
+          p.riskPerShare > 0
+            ? Number(((p.highest - p.entry) / p.riskPerShare).toFixed(2))
+            : null,
       })),
       count: open.length,
       maxPositions: S.SWING_MAX_OPEN_POSITIONS,
@@ -55,7 +66,7 @@ router.get('/positions', requirePrivate, (req, res) => {
   });
 });
 
-router.get('/trades', requirePrivate, (req, res) => {
+router.get("/trades", requirePrivate, (req, res) => {
   const state = swingState.getState();
   const trades = state.closedTrades;
   const wins = trades.filter((t) => t.pnl > 0);
@@ -75,16 +86,25 @@ router.get('/trades', requirePrivate, (req, res) => {
         signals: t.signals,
         openedOn: t.openedOn,
         rMultiple: toR(t.pnl),
-        returnPct: t.entry > 0 ? Number((((t.exit - t.entry) / t.entry) * 100).toFixed(2)) : null,
+        returnPct:
+          t.entry > 0
+            ? Number((((t.exit - t.entry) / t.entry) * 100).toFixed(2))
+            : null,
       })),
       stats: {
         total: trades.length,
         wins: wins.length,
         losses: losses.length,
-        winRate: trades.length ? Number(((wins.length / trades.length) * 100).toFixed(1)) : null,
+        winRate: trades.length
+          ? Number(((wins.length / trades.length) * 100).toFixed(1))
+          : null,
         totalR: Number(totalR.toFixed(2)),
-        avgR: trades.length ? Number((totalR / trades.length).toFixed(2)) : null,
-        expectancyR: trades.length ? Number((totalR / trades.length).toFixed(2)) : null,
+        avgR: trades.length
+          ? Number((totalR / trades.length).toFixed(2))
+          : null,
+        expectancyR: trades.length
+          ? Number((totalR / trades.length).toFixed(2))
+          : null,
       },
       counters: state.counters,
       redacted: true,
@@ -97,17 +117,25 @@ router.get('/trades', requirePrivate, (req, res) => {
       total: trades.length,
       wins: wins.length,
       losses: losses.length,
-      winRate: trades.length ? Number(((wins.length / trades.length) * 100).toFixed(1)) : null,
+      winRate: trades.length
+        ? Number(((wins.length / trades.length) * 100).toFixed(1))
+        : null,
       totalPnl: state.totalRealizedPnl,
-      avgWin: wins.length ? Number((wins.reduce((s, t) => s + t.pnl, 0) / wins.length).toFixed(0)) : null,
-      avgLoss: losses.length ? Number((losses.reduce((s, t) => s + t.pnl, 0) / losses.length).toFixed(0)) : null,
+      avgWin: wins.length
+        ? Number((wins.reduce((s, t) => s + t.pnl, 0) / wins.length).toFixed(0))
+        : null,
+      avgLoss: losses.length
+        ? Number(
+            (losses.reduce((s, t) => s + t.pnl, 0) / losses.length).toFixed(0),
+          )
+        : null,
     },
     counters: state.counters,
   });
 });
 
 /** The raw screener universe, before per-symbol daily-candle analysis. */
-router.get('/candidates', async (req, res) => {
+router.get("/candidates", async (req, res) => {
   try {
     const universe = await getSwingCandidates();
     res.json({ count: Object.keys(universe).length, candidates: universe });
@@ -117,13 +145,19 @@ router.get('/candidates', async (req, res) => {
 });
 
 /** Evaluate a single symbol on demand — useful for checking a name you're already watching. */
-router.get('/analyze/:symbol', async (req, res) => {
+router.get("/analyze/:symbol", async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
     const indexReturn = await getIndexReturn();
-    const result = await evaluateSwingSignals(symbol, indexReturn);
+    const result = await evaluateSwingSignals(symbol, indexReturn, {
+      dropPartialBar: getMarketStatus().isOpen,
+    });
     if (!result) {
-      return res.json({ symbol, signals: [], message: 'No signals fired, or insufficient daily data.' });
+      return res.json({
+        symbol,
+        signals: [],
+        message: "No signals fired, or insufficient daily data.",
+      });
     }
     res.json(result);
   } catch (e) {
@@ -132,17 +166,17 @@ router.get('/analyze/:symbol', async (req, res) => {
 });
 
 /** Force a scan now, ignoring the schedule and the already-ran-today guard. */
-router.post('/admin/scan', requireKey, async (req, res) => {
+router.post("/admin/scan", requireKey, async (req, res) => {
   const result = await swingLoop.runSwingScan({ force: true });
   res.json({ ran: result !== null, result });
 });
 
-router.post('/admin/start', requireKey, (req, res) => {
+router.post("/admin/start", requireKey, (req, res) => {
   swingLoop.start();
   res.json({ started: true });
 });
 
-router.post('/admin/stop', requireKey, (req, res) => {
+router.post("/admin/stop", requireKey, (req, res) => {
   swingLoop.stop();
   res.json({ stopped: true });
 });
@@ -153,18 +187,22 @@ router.post('/admin/stop', requireKey, (req, res) => {
  * the capital). Without this the scanner keeps managing a position you no
  * longer hold.
  */
-router.post('/positions/:symbol/close', requireKey, (req, res) => {
+router.post("/positions/:symbol/close", requireKey, (req, res) => {
   const symbol = req.params.symbol.toUpperCase();
   const state = swingState.getState();
   const pos = state.openPositions[symbol];
 
   if (!pos || pos.closed) {
-    return res.status(404).json({ error: `No open swing position for ${symbol}` });
+    return res
+      .status(404)
+      .json({ error: `No open swing position for ${symbol}` });
   }
 
   const exitPrice = Number(req.body?.exitPrice);
   if (!exitPrice || Number.isNaN(exitPrice)) {
-    return res.status(400).json({ error: 'Provide a numeric exitPrice in the request body.' });
+    return res
+      .status(400)
+      .json({ error: "Provide a numeric exitPrice in the request body." });
   }
 
   const qty = pos.partialBooked ? pos.runnerQty : pos.qty;
@@ -177,7 +215,7 @@ router.post('/positions/:symbol/close', requireKey, (req, res) => {
     exit: exitPrice,
     qty,
     pnl,
-    reason: 'manual',
+    reason: "manual",
     openedOn: pos.openedOn,
     barsHeld: pos.barsHeld,
     signals: pos.signals,

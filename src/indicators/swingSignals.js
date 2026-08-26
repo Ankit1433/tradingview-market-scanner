@@ -6,9 +6,9 @@
  * still-forming bar - its close is just the current price and its volume is
  * whatever has traded so far. A base breakout evaluated at 11am on partial
  * volume will look completely different by 15:30. The swing loop is therefore
- * scheduled after the close (SWING_SCAN_TIME); the `useLastClosed` option
- * below lets a caller explicitly drop the final bar if it needs to run
- * mid-session.
+ * scheduled after the close (SWING_SCAN_TIME), when the final bar IS the
+ * completed session. A caller running mid-session must pass
+ * `dropPartialBar: true` to discard today's still-forming bar.
  *
  * Same failure contract as the intraday signals: every function returns
  * null/false rather than throwing, so one bad symbol never kills a scan.
@@ -27,14 +27,14 @@ const mean = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
  * cadence over ~150 symbols that would be wasteful and slow, so the swing
  * side fetches once and passes the array around.
  */
-async function loadDaily(symbol, { useLastClosed = true } = {}) {
+async function loadDaily(symbol, { dropPartialBar = false } = {}) {
   const candles = await getHist(symbol, 'NSE', INTERVAL.IN_DAILY, S.SWING_DAILY_BARS);
   if (!candles || candles.length < 60) return null;
 
   // Drop the still-forming bar if asked. Note this can't distinguish "today's
   // partial bar" from "yesterday's complete bar" by content alone - it just
   // trusts the caller, which is why the scheduled run happens after close.
-  const usable = useLastClosed ? candles : candles.slice(0, -1);
+  const usable = dropPartialBar ? candles.slice(0, -1) : candles;
   if (usable.length < 60) return null;
 
   annotateSwing(usable, {
