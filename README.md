@@ -1,4 +1,6 @@
-# NSE Scanner — Intraday + Swing
+# TradingView Market Scanner
+
+A production-style Node.js + Express market intelligence platform for detecting intraday and swing trading setups using technical indicators, price action, and configurable market conditions.
 
 A market scanner for NSE equities with two independent modes sharing one
 codebase:
@@ -19,23 +21,23 @@ Originally a Python/Colab notebook, rewritten as an Express service.
 They are not the same strategy on different timeframes — they disagree on
 almost every parameter, and the disagreements are the interesting part:
 
-| | Intraday | Swing |
-|---|---|---|
-| **Candles** | 5-minute | Daily |
-| **Universe filter** | Already moving (change > 2%, rel vol > 2x) | *Not* extended today (change < 5%), above 200DMA |
-| **Poll cadence** | 15–30s tick loop | Once daily, after close |
-| **Stop basis** | Fixed points / structural level | ATR-scaled (2× ATR14), tightened to structure |
-| **Target** | Fixed +10 points | 2.5R |
-| **Trail** | 1.5% from peak | Chandelier (peak − 2.5× ATR) |
-| **Confluence gate** | 3+ signals | 2+ signals |
-| **Time limit** | Square-off at 15:15 | Time stop at 15 sessions under 1R |
-| **State** | In-memory, wiped daily | Persisted to disk |
+|                     | Intraday                                   | Swing                                            |
+| ------------------- | ------------------------------------------ | ------------------------------------------------ |
+| **Candles**         | 5-minute                                   | Daily                                            |
+| **Universe filter** | Already moving (change > 2%, rel vol > 2x) | _Not_ extended today (change < 5%), above 200DMA |
+| **Poll cadence**    | 15–30s tick loop                           | Once daily, after close                          |
+| **Stop basis**      | Fixed points / structural level            | ATR-scaled (2× ATR14), tightened to structure    |
+| **Target**          | Fixed +10 points                           | 2.5R                                             |
+| **Trail**           | 1.5% from peak                             | Chandelier (peak − 2.5× ATR)                     |
+| **Confluence gate** | 3+ signals                                 | 2+ signals                                       |
+| **Time limit**      | Square-off at 15:15                        | Time stop at 15 sessions under 1R                |
+| **State**           | In-memory, wiped daily                     | Persisted to disk                                |
 
 Two of those deserve explanation:
 
 **The universe filters are near-opposites.** The intraday scan wants stocks
 already in motion. For a swing entry that's exactly backwards — a stock up 6%
-today is a *bad* swing entry, because your stop now sits far below and your
+today is a _bad_ swing entry, because your stop now sits far below and your
 risk-per-share is inflated by the move you missed. So the swing screener
 explicitly excludes stocks up more than 5% on the day.
 
@@ -50,26 +52,26 @@ two common conditions coinciding by chance.
 
 ## Intraday signals
 
-| Signal | Condition | Provides a stop? |
-|---|---|---|
-| **Pullback** | Uptrend (EMA9 > EMA20), price within 0.3% of EMA9, green candle, rising volume | Yes — below EMA9 |
-| **ORB breakout** | Clears the 9:15–9:45 opening range high | Yes — opening range low |
-| **No-pullback runner** | Above EMA9/VWAP for 8+ bars without touching EMA9 | Yes — below EMA9 |
-| **Afternoon breakout** | ~2h base within 2% range, broken on 3× volume | Yes — old base high |
-| **Momentum** | Price / change% / rel volume all rising across 5 cycles | No |
-| **Volume spike** | Current bar ≥ 3× the prior 5-bar average | No |
-| **VWAP reclaim** | Cross back above VWAP on ≥1.5× average volume | No |
+| Signal                 | Condition                                                                      | Provides a stop?        |
+| ---------------------- | ------------------------------------------------------------------------------ | ----------------------- |
+| **Pullback**           | Uptrend (EMA9 > EMA20), price within 0.3% of EMA9, green candle, rising volume | Yes — below EMA9        |
+| **ORB breakout**       | Clears the 9:15–9:45 opening range high                                        | Yes — opening range low |
+| **No-pullback runner** | Above EMA9/VWAP for 8+ bars without touching EMA9                              | Yes — below EMA9        |
+| **Afternoon breakout** | ~2h base within 2% range, broken on 3× volume                                  | Yes — old base high     |
+| **Momentum**           | Price / change% / rel volume all rising across 5 cycles                        | No                      |
+| **Volume spike**       | Current bar ≥ 3× the prior 5-bar average                                       | No                      |
+| **VWAP reclaim**       | Cross back above VWAP on ≥1.5× average volume                                  | No                      |
 
 ## Swing signals
 
-| Signal | Condition | Provides a stop? |
-|---|---|---|
-| **Base breakout** | 20-day base within 12% range, broken on 1.8× base volume | Yes — base low |
-| **MA pullback** | Pullback into EMA20/EMA50 with trend intact, ≤15% deep | Yes — recent swing low |
-| **MA stack** | Price > EMA20 > EMA50 > EMA200, all rising | No |
-| **52W high** | Within 5% of the 52-week high | No |
-| **Volume dry-up** | Recent 5-day volume ≤70% of the prior base average | No |
-| **RS leader** | 60-day return beats the index's | No |
+| Signal            | Condition                                                | Provides a stop?       |
+| ----------------- | -------------------------------------------------------- | ---------------------- |
+| **Base breakout** | 20-day base within 12% range, broken on 1.8× base volume | Yes — base low         |
+| **MA pullback**   | Pullback into EMA20/EMA50 with trend intact, ≤15% deep   | Yes — recent swing low |
+| **MA stack**      | Price > EMA20 > EMA50 > EMA200, all rising               | No                     |
+| **52W high**      | Within 5% of the 52-week high                            | No                     |
+| **Volume dry-up** | Recent 5-day volume ≤70% of the prior base average       | No                     |
+| **RS leader**     | 60-day return beats the index's                          | No                     |
 
 In both modes, signals without a natural stop level contribute to the
 confluence count but can't define an entry on their own.
@@ -208,16 +210,30 @@ Design notes worth calling out:
 
 Interactive docs at **`/api/docs`** (OpenAPI 3.0). Live demo page at **`/demo`**.
 
+## Screenshots
+
+### Live Scanner Dashboard
+
+![TradingView Market Scanner Dashboard](docs/images/dashboard.png)
+
+### Signal Tape & Confluence Detection
+
+![Signal Tape](docs/images/signals.png)
+
+### APi Docs
+
+![Scanner Analytics](docs/images/APiDocs.png)
+
 ### Public — no auth, always populated
 
-| Endpoint | Returns |
-|---|---|
+| Endpoint                         | Returns                                                                            |
+| -------------------------------- | ---------------------------------------------------------------------------------- |
 | `GET /api/public/signals/recent` | Signal journal, newest first. Filter by `mode`, `type`, `symbol`, `confluenceOnly` |
-| `GET /api/public/stats` | Signal counts by type/mode/sector, daily histogram, win rate |
-| `GET /api/public/market/status` | Session phase, next open, holiday flag |
-| `GET /api/public/health` | Aggregate health; 503 when degraded |
-| `GET /api/public/stream` | **SSE** live signal stream |
-| `GET /api/public/live/stocks` | Current tracked universe |
+| `GET /api/public/stats`          | Signal counts by type/mode/sector, daily histogram, win rate                       |
+| `GET /api/public/market/status`  | Session phase, next open, holiday flag                                             |
+| `GET /api/public/health`         | Aggregate health; 503 when degraded                                                |
+| `GET /api/public/stream`         | **SSE** live signal stream                                                         |
+| `GET /api/public/live/stocks`    | Current tracked universe                                                           |
 
 ### Live state — empty outside market hours by nature
 
@@ -276,7 +292,7 @@ The split exists for a concrete reason: the market data sources are
 undocumented internal TradingView endpoints, and requests to them from
 datacenter IPs are commonly blocked. A cloud-hosted scanner tends to get 403s
 while the same code works from a residential connection — and it fails
-*quietly*, so the page just sits empty. Running the scanner where the data
+_quietly_, so the page just sits empty. Running the scanner where the data
 works and the API where it's reachable sidesteps that entirely, and the hosted
 half ends up with no outbound market-data dependency at all.
 
@@ -320,7 +336,7 @@ npm run backtest
 
 Edit `SYMBOLS` in `src/backtest/backtest.js` first — the screener endpoint only
 returns a live snapshot, so there's no historical record of which stocks matched
-the filter on a past date. The backtest validates entry and exit *logic*, not
+the filter on a past date. The backtest validates entry and exit _logic_, not
 stock selection.
 
 ---
