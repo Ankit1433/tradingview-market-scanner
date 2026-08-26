@@ -34,7 +34,7 @@ const journal = require("../state/signalJournal");
 const eventStream = require("../services/eventStream");
 const pushClient = require("../services/pushClient");
 const S = require("../config/swingConstants");
-
+const { getMarketStatus } = require("../services/marketStatus");
 let running = false;
 let timer = null;
 let scanning = false; // guards against a second scan starting while one is mid-flight
