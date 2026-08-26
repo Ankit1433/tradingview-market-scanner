@@ -6,15 +6,15 @@ A production-style Node.js + Express market intelligence platform for detecting 
 
 ### Live Scanner Dashboard
 
-![TradingView Market Scanner Dashboard](docs/dashboard.png)
+![TradingView Market Scanner Dashboard](src/docs/dashboard.png)
 
 ### Signal Tape & Confluence Detection
 
-![Signal Tape](docs/signals.png)
+![Signal Tape](src/docs/signals.png)
 
 ### APi Docs
 
-![Scanner Analytics](docs/APiDocs.png)
+![Scanner Analytics](src/docs/APiDocs.png)
 
 A market scanner for NSE equities with two independent modes sharing one
 codebase:
