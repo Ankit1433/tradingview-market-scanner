@@ -2,6 +2,20 @@
 
 A production-style Node.js + Express market intelligence platform for detecting intraday and swing trading setups using technical indicators, price action, and configurable market conditions.
 
+## Screenshots
+
+### Live Scanner Dashboard
+
+![TradingView Market Scanner Dashboard](docs/dashboard.png)
+
+### Signal Tape & Confluence Detection
+
+![Signal Tape](docs/signals.png)
+
+### APi Docs
+
+![Scanner Analytics](docs/APiDocs.png)
+
 A market scanner for NSE equities with two independent modes sharing one
 codebase:
 
@@ -209,20 +223,6 @@ Design notes worth calling out:
 ## API
 
 Interactive docs at **`/api/docs`** (OpenAPI 3.0). Live demo page at **`/demo`**.
-
-## Screenshots
-
-### Live Scanner Dashboard
-
-![TradingView Market Scanner Dashboard](docs/images/dashboard.png)
-
-### Signal Tape & Confluence Detection
-
-![Signal Tape](docs/images/signals.png)
-
-### APi Docs
-
-![Scanner Analytics](docs/images/APiDocs.png)
 
 ### Public — no auth, always populated
 
