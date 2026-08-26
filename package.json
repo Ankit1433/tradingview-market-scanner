@@ -1,0 +1,27 @@
+{
+  "name": "nse-momentum-scanner",
+  "version": "1.0.0",
+  "description": "NSE/BSE scanner with two independent modes: live intraday momentum (5-min signals, Telegram alerts, confluence-gated sizing) and daily swing (ATR-based stops, R-multiple targets, persistent multi-day position tracking).",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "backtest": "node src/backtest/backtest.js",
+    "test:swing": "node test-swing.js",
+    "test:api": "node test-api.js",
+    "test": "node test-swing.js && node test-api.js && node test-ingest.js",
+    "test:ingest": "node test-ingest.js"
+  },
+  "dependencies": {
+    "@mathieuc/tradingview": "^3.5.2",
+    "axios": "^1.7.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "node-cron": "^3.0.3"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}

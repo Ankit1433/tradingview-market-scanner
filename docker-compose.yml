@@ -1,0 +1,49 @@
+# Two deployment shapes. Run ONE of these.
+#
+#   api    - read-only, cloud-hosted. Receives signals over HTTP.
+#   full   - scanner + API in one process. For running on your own machine.
+#
+# The split exists because the market data sources are undocumented internal
+# TradingView endpoints. Requests to them from a datacenter IP are commonly
+# blocked, so the scanner half wants a residential connection.
+
+services:
+  # Cloud-hosted read API. No outbound market-data dependency.
+  api:
+    build: .
+    profiles: [api]
+    ports:
+      - "${PORT:-4000}:4000"
+    environment:
+      INGEST_MODE: "true"
+      PUBLIC_MODE: "true"
+      API_KEY: "${API_KEY:?set API_KEY in .env}"
+      CORS_ORIGIN: "${CORS_ORIGIN:-*}"
+      RATE_LIMIT_PER_MIN: "${RATE_LIMIT_PER_MIN:-60}"
+    volumes:
+      # Named volume, not a bind mount: the journal and swing positions must
+      # survive redeploys.
+      - scanner-data:/app/data
+    restart: unless-stopped
+
+  # Scanner + API together. Run this at home.
+  full:
+    build: .
+    profiles: [full]
+    ports:
+      - "${PORT:-4000}:4000"
+    environment:
+      API_KEY: "${API_KEY:?set API_KEY in .env}"
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN:-}"
+      TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID:-}"
+      ENABLE_INTRADAY: "${ENABLE_INTRADAY:-true}"
+      ENABLE_SWING: "${ENABLE_SWING:-true}"
+      # Set these to forward signals to a hosted instance.
+      PUSH_URL: "${PUSH_URL:-}"
+      PUSH_API_KEY: "${PUSH_API_KEY:-}"
+    volumes:
+      - scanner-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  scanner-data:

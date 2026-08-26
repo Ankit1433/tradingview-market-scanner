@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NSE Scanner — live signal tape</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink:        #121A23;
+    --ink-deep:   #0C1319;
+    --surface:    #1A242F;
+    --surface-2:  #212D3A;
+    --line:       #2C3A49;
+    --paper:      #E6EDF4;
+    --muted:      #7B8B9C;
+    --muted-dim:  #55677A;
+    --signal:     #F2A93B;
+    --confluence: #3DD6C4;
+    --loss:       #E5484D;
+    --gain:       #4FB477;
+
+    --gutter: clamp(1rem, 4vw, 3.5rem);
+  }
+
+  * { box-sizing: border-box; }
+
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    margin: 0;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: 'Familjen Grotesk', ui-sans-serif, system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .mono {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+  }
+
+  a { color: inherit; }
+
+  /* ---------- masthead ---------- */
+
+  header {
+    border-bottom: 1px solid var(--line);
+    padding: 1.25rem var(--gutter);
+    display: flex;
+    align-items: baseline;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    background: var(--ink-deep);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .wordmark {
+    font-weight: 700;
+    font-size: 1.05rem;
+    letter-spacing: -0.02em;
+    margin: 0;
+  }
+  .wordmark span { color: var(--muted); font-weight: 400; }
+
+  .status-strip {
+    display: flex;
+    gap: 1.25rem;
+    align-items: baseline;
+    margin-left: auto;
+    flex-wrap: wrap;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .status-strip b { color: var(--paper); font-weight: 500; }
+
+  .pulse {
+    display: inline-block;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--muted-dim);
+    margin-right: 0.45rem;
+    vertical-align: middle;
+  }
+  .pulse.live {
+    background: var(--confluence);
+    animation: breathe 2.4s ease-in-out infinite;
+  }
+  .pulse.closed { background: var(--muted-dim); }
+  .warn { color: var(--signal) !important; }
+
+  @keyframes breathe {
+    0%, 100% { opacity: 1;   box-shadow: 0 0 0 0 rgba(61,214,196,0.45); }
+    50%      { opacity: 0.6; box-shadow: 0 0 0 5px rgba(61,214,196,0); }
+  }
+
+  /* ---------- hero: the thesis ---------- */
+
+  .thesis {
+    padding: clamp(2.5rem, 7vw, 5rem) var(--gutter) clamp(2rem, 5vw, 3rem);
+    max-width: 62rem;
+  }
+
+  .thesis h2 {
+    font-size: clamp(1.75rem, 4.6vw, 3.1rem);
+    line-height: 1.08;
+    letter-spacing: -0.03em;
+    font-weight: 600;
+    margin: 0 0 1.1rem;
+    text-wrap: balance;
+  }
+  .thesis h2 em {
+    font-style: normal;
+    color: var(--confluence);
+  }
+  .thesis p {
+    color: var(--muted);
+    max-width: 46rem;
+    margin: 0 0 0.75rem;
+    font-size: clamp(0.95rem, 1.6vw, 1.05rem);
+  }
+
+  .eyebrow {
+    font-size: 0.68rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted-dim);
+    margin: 0 0 1rem;
+    font-weight: 500;
+  }
+
+  /* ---------- the gate: signature element ---------- */
+
+  .gate-legend {
+    display: flex;
+    gap: 2rem;
+    flex-wrap: wrap;
+    padding: 0 var(--gutter) 1.25rem;
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+  .gate-legend div { display: flex; align-items: center; gap: 0.5rem; }
+  .swatch {
+    width: 10px; height: 10px; border-radius: 2px;
+    flex: none;
+  }
+  .swatch.s { background: var(--signal); }
+  .swatch.c { background: var(--confluence); }
+
+  /* ---------- stats band ---------- */
+
+  .band {
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    background: var(--ink-deep);
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  }
+  .stat {
+    padding: 1.25rem var(--gutter);
+    border-right: 1px solid var(--line);
+  }
+  .stat:last-child { border-right: none; }
+  .stat .k {
+    display: block;
+    font-size: 0.66rem;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--muted-dim);
+    margin-bottom: 0.4rem;
+  }
+  .stat .v {
+    font-size: 1.6rem;
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+  .stat .v.dim { color: var(--muted-dim); }
+
+  /* ---------- layout ---------- */
+
+  main {
+    display: grid;
+    grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+    gap: 0;
+    align-items: start;
+  }
+  @media (max-width: 880px) {
+    main { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  section { padding: 2rem var(--gutter); min-width: 0; }
+  section + section { border-left: 1px solid var(--line); }
+  @media (max-width: 880px) {
+    section + section { border-left: none; border-top: 1px solid var(--line); }
+  }
+
+  h3 {
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 1.25rem;
+    font-weight: 600;
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+  }
+  h3 .count {
+    color: var(--muted-dim);
+    font-weight: 400;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+
+  /* ---------- signal tape ---------- */
+
+  .tape { display: flex; flex-direction: column; gap: 0.6rem; }
+
+  .sig {
+    border: 1px solid var(--line);
+    border-left: 2px solid var(--signal);
+    background: var(--surface);
+    padding: 0.85rem 1rem;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.5rem 1rem;
+    align-items: baseline;
+  }
+  .sig.conf {
+    border-left-color: var(--confluence);
+    background: var(--surface-2);
+  }
+  .sig.fresh { animation: arrive 0.5s cubic-bezier(0.2, 0.8, 0.3, 1); }
+
+  @keyframes arrive {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  .sig .sym {
+    font-weight: 600;
+    font-size: 1rem;
+    letter-spacing: -0.01em;
+  }
+  .sig .px {
+    font-size: 0.88rem;
+    color: var(--muted);
+  }
+  .sig .meta {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .chip {
+    font-size: 0.63rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 0.16rem 0.42rem;
+    border: 1px solid var(--line);
+    color: var(--muted);
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+  .sig.conf .chip {
+    border-color: rgba(61,214,196,0.3);
+    color: var(--confluence);
+  }
+
+  .ts {
+    font-size: 0.68rem;
+    color: var(--muted-dim);
+    margin-left: auto;
+    white-space: nowrap;
+  }
+
+  .mode-tag {
+    font-size: 0.6rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted-dim);
+    border: 1px solid var(--line);
+    padding: 0.1rem 0.3rem;
+    border-radius: 2px;
+  }
+
+  .levels {
+    grid-column: 1 / -1;
+    font-size: 0.75rem;
+    color: var(--muted);
+    display: flex;
+    gap: 1.1rem;
+    flex-wrap: wrap;
+    padding-top: 0.15rem;
+  }
+  .levels b { color: var(--paper); font-weight: 500; }
+
+  /* ---------- distribution bars ---------- */
+
+  .dist { display: flex; flex-direction: column; gap: 0.7rem; }
+  .row { display: grid; grid-template-columns: 1fr auto; gap: 0.3rem 0.75rem; align-items: baseline; }
+  .row .lbl { font-size: 0.78rem; color: var(--paper); }
+  .row .n { font-size: 0.78rem; color: var(--muted); }
+  .row .bar {
+    grid-column: 1 / -1;
+    height: 3px;
+    background: var(--line);
+    position: relative;
+    overflow: hidden;
+  }
+  .row .bar i {
+    position: absolute; inset: 0 auto 0 0;
+    background: var(--signal);
+    display: block;
+    transition: width 0.5s cubic-bezier(0.2,0.8,0.3,1);
+  }
+  /* No variation in the data — keep the bar present for rhythm but stop it
+     reading as a meaningful distribution. */
+  .row .bar i.flat { background: var(--muted-dim); opacity: 0.35; }
+
+  /* ---------- empty state ---------- */
+
+  .empty {
+    border: 1px dashed var(--line);
+    padding: 1.75rem 1.25rem;
+    color: var(--muted);
+    font-size: 0.88rem;
+  }
+  .empty b { color: var(--paper); display: block; margin-bottom: 0.35rem; font-weight: 500; }
+  .empty .next { color: var(--muted-dim); font-size: 0.8rem; margin-top: 0.5rem; }
+
+  /* ---------- footer ---------- */
+
+  footer {
+    border-top: 1px solid var(--line);
+    padding: 2rem var(--gutter) 3rem;
+    color: var(--muted-dim);
+    font-size: 0.78rem;
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+  }
+  footer a { color: var(--muted); text-decoration: none; border-bottom: 1px solid var(--line); padding-bottom: 1px; }
+  footer a:hover, footer a:focus-visible { color: var(--paper); border-color: var(--muted); }
+
+  :focus-visible { outline: 2px solid var(--confluence); outline-offset: 2px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h2 class="wordmark">NSE Scanner <span>/ live tape</span></h2>
+  <div class="status-strip mono">
+    <span><i class="pulse" id="pulse"></i><b id="market">—</b></span>
+    <span>stream <b id="conn">connecting</b></span>
+    <span>scanner <b id="scanner">—</b></span>
+    <span>uptime <b id="uptime">—</b></span>
+  </div>
+</header>
+
+<div class="thesis">
+  <p class="eyebrow">Intraday · Swing · NSE equities</p>
+  <h2>One signal is information. <em>Several at once</em> is an entry.</h2>
+  <p>
+    Most scanners alert on a single condition — a volume spike, a VWAP cross — which
+    produces a lot of noise and few trades worth taking. This one records every signal
+    but only commits capital when enough of them agree on the same symbol at the same time.
+  </p>
+  <p>
+    Below is the live tape. Signals stream in over SSE as they fire; everything is served
+    from the persisted journal, so the page has content whether or not the market is open.
+  </p>
+</div>
+
+<div class="gate-legend">
+  <div><span class="swatch s"></span> Below the gate — logged, not traded</div>
+  <div><span class="swatch c"></span> Cleared the gate — sized and tracked</div>
+</div>
+
+<div class="band" id="band">
+  <div class="stat"><span class="k">Signals logged</span><span class="v mono" id="s-total">—</span></div>
+  <div class="stat"><span class="k">Cleared gate</span><span class="v mono" id="s-conf">—</span></div>
+  <div class="stat"><span class="k">Gate rate</span><span class="v mono" id="s-rate">—</span></div>
+  <div class="stat"><span class="k">Intraday</span><span class="v mono" id="s-intra">—</span></div>
+  <div class="stat"><span class="k">Swing</span><span class="v mono" id="s-swing">—</span></div>
+</div>
+
+<main>
+  <section>
+    <h3>Signal tape <span class="count" id="tape-count"></span></h3>
+    <div class="tape" id="tape">
+      <div class="empty"><b>Loading…</b>Fetching the signal journal.</div>
+    </div>
+  </section>
+
+  <section>
+    <h3>Signal distribution</h3>
+    <div class="dist" id="dist">
+      <div class="empty"><b>No data yet</b>Distribution appears once signals are recorded.</div>
+    </div>
+
+    <h3 style="margin-top:2.5rem">Most frequent symbols</h3>
+    <div class="dist" id="syms">
+      <div class="empty"><b>No data yet</b></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <span>Not financial advice. Signals carry no guarantee of profitability.</span>
+  <a href="/api/docs">API docs</a>
+  <a href="/api/public/stats">Raw stats</a>
+  <a href="/api/public/signals/recent">Raw feed</a>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  var $ = function (id) { return document.getElementById(id); };
+  var MAX_TAPE = 40;
+  var seen = [];
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function num(n, dp) {
+    if (n === null || n === undefined || isNaN(n)) return '—';
+    return Number(n).toFixed(dp === undefined ? 2 : dp);
+  }
+
+  function ago(iso) {
+    var d = Date.now() - new Date(iso).getTime();
+    if (isNaN(d)) return '';
+    var s = Math.floor(d / 1000);
+    if (s < 60) return s + 's ago';
+    var m = Math.floor(s / 60);
+    if (m < 60) return m + 'm ago';
+    var h = Math.floor(m / 60);
+    if (h < 24) return h + 'h ago';
+    return Math.floor(h / 24) + 'd ago';
+  }
+
+  function dur(sec) {
+    if (sec == null) return '—';
+    if (sec < 60) return sec + 's';
+    var m = Math.floor(sec / 60);
+    if (m < 60) return m + 'm';
+    var h = Math.floor(m / 60);
+    if (h < 24) return h + 'h';
+    return Math.floor(h / 24) + 'd';
+  }
+
+  // ---- market status -------------------------------------------------
+
+  function loadMarket() {
+    fetch('/api/public/market/status')
+      .then(function (r) { return r.json(); })
+      .then(function (m) {
+        var phases = {
+          weekend: 'Weekend', holiday: 'Holiday', pre_market: 'Pre-market',
+          opening_range: 'Opening range', open: 'Open', lunch_lull: 'Midday lull',
+          square_off: 'Square-off', post_market: 'Closed'
+        };
+        $('market').textContent = phases[m.phase] || m.phase;
+        $('pulse').className = 'pulse ' + (m.isOpen ? 'live' : 'closed');
+
+        // Distinguish "market quiet" from "scanner stopped reporting" - both
+        // produce an empty feed, and only one of them is a fault.
+        var sc = m.scanner || {};
+        var el = $('scanner');
+        if (sc.reporting) {
+          el.textContent = 'reporting';
+          el.classList.remove('warn');
+        } else if (m.isOpen) {
+          el.textContent = 'not reporting';
+          el.classList.add('warn');
+        } else {
+          el.textContent = 'idle';
+          el.classList.remove('warn');
+        }
+        window.__market = m;
+      })
+      .catch(function () { $('market').textContent = 'unknown'; });
+  }
+
+  // ---- stats ---------------------------------------------------------
+
+  function bars(el, items) {
+    if (!items || !items.length) {
+      el.innerHTML = '<div class="empty"><b>No data yet</b></div>';
+      return;
+    }
+    var counts = items.map(function (i) { return i.count; });
+    var max = Math.max.apply(null, counts);
+    var min = Math.min.apply(null, counts);
+
+    // When every count is identical the bars encode nothing — full-width bars
+    // across the board would imply a distribution that doesn't exist. Render
+    // them flat and muted instead, so the numbers carry the meaning.
+    var flat = max === min;
+
+    el.innerHTML = items.map(function (i) {
+      var pct = flat ? 100 : (i.count / max) * 100;
+      return '<div class="row">' +
+        '<span class="lbl">' + esc(i.key) + '</span>' +
+        '<span class="n mono">' + i.count + '</span>' +
+        '<span class="bar"><i class="' + (flat ? 'flat' : '') + '" style="width:' + pct.toFixed(1) + '%"></i></span>' +
+        '</div>';
+    }).join('');
+  }
+
+  function loadStats() {
+    fetch('/api/public/stats')
+      .then(function (r) { return r.json(); })
+      .then(function (s) {
+        var sig = s.signals || {};
+        $('s-total').textContent = sig.totalRecorded != null ? sig.totalRecorded : '0';
+        $('s-conf').textContent = sig.confluenceCount != null ? sig.confluenceCount : '0';
+        $('s-rate').textContent = sig.confluenceRate != null ? sig.confluenceRate + '%' : '—';
+        $('s-intra').textContent = (sig.byMode && sig.byMode.intraday) || '0';
+        $('s-swing').textContent = (sig.byMode && sig.byMode.swing) || '0';
+
+        if (!sig.totalRecorded) {
+          ['s-total','s-conf','s-rate','s-intra','s-swing'].forEach(function (id) {
+            $(id).classList.add('dim');
+          });
+        }
+
+        $('uptime').textContent = dur(s.system && s.system.uptimeSeconds);
+
+        bars($('dist'), sig.byType);
+        bars($('syms'), sig.topSymbols);
+      })
+      .catch(function () {});
+  }
+
+  // ---- tape ----------------------------------------------------------
+
+  function sigHTML(s, fresh) {
+    var chips = (s.signals || []).map(function (l) {
+      return '<span class="chip">' + esc(l) + '</span>';
+    }).join('');
+
+    var levels = '';
+    if (s.levels && s.levels.entry != null) {
+      levels = '<div class="levels mono">' +
+        '<span>entry <b>' + num(s.levels.entry) + '</b></span>' +
+        (s.levels.stop != null ? '<span>stop <b>' + num(s.levels.stop) + '</b></span>' : '') +
+        '</div>';
+    }
+
+    var ctx = s.context || {};
+    var sub = [];
+    if (ctx.sector) sub.push(esc(ctx.sector));
+    if (ctx.change != null) sub.push((ctx.change >= 0 ? '+' : '') + num(ctx.change, 2) + '%');
+    if (ctx.relVolume != null) sub.push(num(ctx.relVolume, 1) + '× vol');
+
+    return '<article class="sig' + (s.confluence ? ' conf' : '') + (fresh ? ' fresh' : '') + '">' +
+      '<span class="sym">' + esc(s.symbol) + '</span>' +
+      '<span class="px mono">' + num(s.price) + '</span>' +
+      '<div class="meta">' +
+        '<span class="mode-tag">' + esc(s.mode) + '</span>' +
+        chips +
+        '<span class="ts mono">' + ago(s.ts) + '</span>' +
+      '</div>' +
+      (sub.length ? '<div class="levels">' + sub.join(' · ') + '</div>' : '') +
+      levels +
+    '</article>';
+  }
+
+  function renderTape() {
+    var el = $('tape');
+    if (!seen.length) {
+      var m = window.__market || {};
+      var sc = m.scanner || {};
+      var next = m.nextOpen
+        ? '<div class="next">Next session ' + esc(m.nextOpen.date) + ' at ' + esc(m.nextOpen.time) + ' IST.</div>'
+        : '';
+
+      var body, head;
+      if (m.isOpen && sc.reporting === false) {
+        head = 'Scanner is not reporting';
+        body = 'The market is open but no scanner has checked in recently. Signals will appear once it reconnects.';
+      } else {
+        head = 'No signals recorded yet';
+        body = 'The journal fills as the scanner runs. Nothing has fired so far.';
+      }
+
+      el.innerHTML = '<div class="empty">' +
+        '<b>' + head + '</b>' + body + next +
+        '</div>';
+      $('tape-count').textContent = '';
+      return;
+    }
+    el.innerHTML = seen.map(function (s, i) { return sigHTML(s, i === 0 && s.__fresh); }).join('');
+    $('tape-count').textContent = seen.length + ' shown';
+  }
+
+  function loadTape() {
+    fetch('/api/public/signals/recent?limit=' + MAX_TAPE)
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        seen = d.signals || [];
+        renderTape();
+      })
+      .catch(function () {
+        $('tape').innerHTML = '<div class="empty"><b>Could not reach the API</b>' +
+          'The scanner service is not responding on this host.</div>';
+      });
+  }
+
+  // ---- live stream ---------------------------------------------------
+
+  function connect() {
+    if (typeof EventSource === 'undefined') {
+      $('conn').textContent = 'unsupported';
+      return;
+    }
+    var es = new EventSource('/api/public/stream');
+
+    es.addEventListener('connected', function () {
+      $('conn').textContent = 'live';
+    });
+
+    es.addEventListener('signal', function (e) {
+      var s;
+      try { s = JSON.parse(e.data); } catch (_) { return; }
+      if (s.replay) return; // history already rendered by loadTape
+      s.__fresh = true;
+      seen.unshift(s);
+      if (seen.length > MAX_TAPE) seen.pop();
+      renderTape();
+      loadStats();
+    });
+
+    es.addEventListener('scan_status', function () { loadStats(); });
+
+    es.onerror = function () {
+      $('conn').textContent = 'reconnecting';
+    };
+  }
+
+  // ---- boot ----------------------------------------------------------
+
+  loadMarket();
+  loadStats();
+  loadTape();
+  connect();
+
+  setInterval(loadMarket, 60000);
+  setInterval(loadStats, 60000);
+  setInterval(renderTape, 30000); // refresh relative timestamps
+})();
+</script>
+</body>
+</html>
