@@ -1,22 +1,24 @@
 /**
  * Swing signal evaluators. All operate on DAILY candles.
  *
- * A note that matters for correctness: these evaluate the LAST CLOSED daily
- * candle. If you run this intraday, `candles[length-1]` is today's partial,
- * still-forming bar - its close is just the current price and its volume is
- * whatever has traded so far. A base breakout evaluated at 11am on partial
- * volume will look completely different by 15:30. The swing loop is therefore
- * scheduled after the close (SWING_SCAN_TIME), when the final bar IS the
- * completed session. A caller running mid-session must pass
- * `dropPartialBar: true` to discard today's still-forming bar.
+ * A note that matters for correctness: these evaluate whatever the LAST bar
+ * in the array is. If you run this mid-session, `candles[length-1]` is
+ * today's partial, still-forming bar - its close is just the current price
+ * and its volume is whatever has traded so far. A base breakout evaluated at
+ * 11am on partial volume looks completely different by 15:30.
+ *
+ * The scheduled swing scan runs after the close (SWING_SCAN_TIME), when the
+ * final bar IS the completed session, so it uses the array as-is. A caller
+ * running mid-session must pass `dropPartialBar: true` to discard today's
+ * incomplete bar and evaluate against the last closed one.
  *
  * Same failure contract as the intraday signals: every function returns
  * null/false rather than throwing, so one bad symbol never kills a scan.
  */
 
-const { getHist, INTERVAL } = require('../services/tvHistory');
-const { annotateSwing, rollingHigh, rollingLow } = require('./swingTa');
-const S = require('../config/swingConstants');
+const { getHist, INTERVAL } = require("../services/tvHistory");
+const { annotateSwing } = require("./swingTa");
+const S = require("../config/swingConstants");
 
 const mean = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
 
@@ -26,14 +28,25 @@ const mean = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
  * re-fetches per signal (each check opens its own chart session); at daily
  * cadence over ~150 symbols that would be wasteful and slow, so the swing
  * side fetches once and passes the array around.
+ *
+ * `dropPartialBar` discards the final bar. Pass it when the market is open,
+ * because the feed's last bar is then today's still-forming one. It defaults
+ * to false so the post-close scheduled scan keeps the completed session -
+ * the bar it actually wants to evaluate.
+ *
+ * Note this can't distinguish "today's partial bar" from "yesterday's
+ * complete bar" by content alone; it trusts the caller, which is why the
+ * scheduled run is pinned to after the close.
  */
 async function loadDaily(symbol, { dropPartialBar = false } = {}) {
-  const candles = await getHist(symbol, 'NSE', INTERVAL.IN_DAILY, S.SWING_DAILY_BARS);
+  const candles = await getHist(
+    symbol,
+    "NSE",
+    INTERVAL.IN_DAILY,
+    S.SWING_DAILY_BARS,
+  );
   if (!candles || candles.length < 60) return null;
 
-  // Drop the still-forming bar if asked. Note this can't distinguish "today's
-  // partial bar" from "yesterday's complete bar" by content alone - it just
-  // trusts the caller, which is why the scheduled run happens after close.
   const usable = dropPartialBar ? candles.slice(0, -1) : candles;
   if (usable.length < 60) return null;
 
@@ -57,7 +70,7 @@ function maStack(candles) {
   if (!(last.emaFast > last.emaMid)) return null;
   if (!(last.emaMid > last.emaSlow)) return null;
   if (!(last.emaFast > prior.emaFast)) return null; // fast MA rising
-  if (!(last.emaMid > prior.emaMid)) return null;   // mid MA rising
+  if (!(last.emaMid > prior.emaMid)) return null; // mid MA rising
 
   return {
     close: last.close,
@@ -127,7 +140,9 @@ function maPullback(candles) {
 
   // Must actually have pulled back from a recent high, not just be drifting
   // sideways at the MA.
-  const recentHigh = Math.max(...candles.slice(-S.SWING_BASE_LOOKBACK_DAYS).map((c) => c.high));
+  const recentHigh = Math.max(
+    ...candles.slice(-S.SWING_BASE_LOOKBACK_DAYS).map((c) => c.high),
+  );
   const depthPct = ((recentHigh - last.close) / recentHigh) * 100;
   if (depthPct <= 0) return null;
   if (depthPct > S.SWING_PULLBACK_MAX_DEPTH_PCT) return null; // too deep - breakdown, not pullback
@@ -203,11 +218,30 @@ function rsLeader(candles, indexReturnPct) {
   return { stockReturn, indexReturn: indexReturnPct, outperformance };
 }
 
-/** Index return over the same lookback, for the RS comparison. */
-async function getIndexReturn(symbol = 'NIFTY') {
+/**
+ * Index return over the same lookback, for the RS comparison.
+ *
+ * Takes the same dropPartialBar treatment as the symbols it's compared
+ * against - measuring a stock's closed-bar return against the index's
+ * partial-bar return would bias every RS reading in whichever direction the
+ * index happens to be moving today.
+ */
+async function getIndexReturn(
+  symbol = "NIFTY",
+  { dropPartialBar = false } = {},
+) {
   try {
-    const candles = await getHist(symbol, 'NSE', INTERVAL.IN_DAILY, S.SWING_RS_LOOKBACK_DAYS + 10);
-    if (!candles || candles.length < S.SWING_RS_LOOKBACK_DAYS + 1) return null;
+    const raw = await getHist(
+      symbol,
+      "NSE",
+      INTERVAL.IN_DAILY,
+      S.SWING_RS_LOOKBACK_DAYS + 10,
+    );
+    if (!raw) return null;
+
+    const candles = dropPartialBar ? raw.slice(0, -1) : raw;
+    if (candles.length < S.SWING_RS_LOOKBACK_DAYS + 1) return null;
+
     const n = candles.length;
     const then = candles[n - 1 - S.SWING_RS_LOOKBACK_DAYS].close;
     const now = candles[n - 1].close;
@@ -224,6 +258,9 @@ async function getIndexReturn(symbol = 'NIFTY') {
  * list that fired. Structural signals carry a stop level; contextual ones
  * (52w high, dry-up, RS, MA stack) contribute to the confluence count but
  * can't define an entry on their own - same split as the intraday side.
+ *
+ * `opts` is forwarded to loadDaily, so `{ dropPartialBar: true }` propagates
+ * from the caller.
  */
 async function evaluateSwingSignals(symbol, indexReturnPct, opts = {}) {
   try {
@@ -238,7 +275,7 @@ async function evaluateSwingSignals(symbol, indexReturnPct, opts = {}) {
     const bb = baseBreakout(candles);
     if (bb) {
       signals.push({
-        label: 'BASE BREAKOUT',
+        label: "BASE BREAKOUT",
         detail: `Broke ${bb.baseRangePct.toFixed(1)}%-tight ${S.SWING_BASE_LOOKBACK_DAYS}d base @ ₹${bb.baseHigh.toFixed(2)} on ${bb.volumeRatio.toFixed(1)}x volume`,
         entry: bb.price,
         structuralStop: bb.structuralStop,
@@ -248,7 +285,7 @@ async function evaluateSwingSignals(symbol, indexReturnPct, opts = {}) {
     const pb = maPullback(candles);
     if (pb) {
       signals.push({
-        label: 'MA PULLBACK',
+        label: "MA PULLBACK",
         detail: `Pulled back ${pb.depthFromHighPct.toFixed(1)}% from ₹${pb.recentHigh.toFixed(2)} into ${pb.maLabel}`,
         entry: pb.price,
         structuralStop: pb.structuralStop,
@@ -258,7 +295,7 @@ async function evaluateSwingSignals(symbol, indexReturnPct, opts = {}) {
     const stack = maStack(candles);
     if (stack) {
       signals.push({
-        label: 'MA STACK',
+        label: "MA STACK",
         detail: `Price > EMA${S.SWING_EMA_FAST} > EMA${S.SWING_EMA_MID} > EMA${S.SWING_EMA_SLOW}, rising`,
         entry: null,
         structuralStop: null,
@@ -268,7 +305,7 @@ async function evaluateSwingSignals(symbol, indexReturnPct, opts = {}) {
     const h52 = near52WeekHigh(candles);
     if (h52) {
       signals.push({
-        label: '52W HIGH',
+        label: "52W HIGH",
         detail: `${h52.distancePct.toFixed(1)}% below 52w high ₹${h52.high52.toFixed(2)}`,
         entry: null,
         structuralStop: null,
@@ -278,7 +315,7 @@ async function evaluateSwingSignals(symbol, indexReturnPct, opts = {}) {
     const dry = volumeDryUp(candles);
     if (dry) {
       signals.push({
-        label: 'VOLUME DRYUP',
+        label: "VOLUME DRYUP",
         detail: `Recent volume ${(dry.ratio * 100).toFixed(0)}% of base average`,
         entry: null,
         structuralStop: null,
@@ -288,8 +325,8 @@ async function evaluateSwingSignals(symbol, indexReturnPct, opts = {}) {
     const rs = rsLeader(candles, indexReturnPct);
     if (rs) {
       signals.push({
-        label: 'RS LEADER',
-        detail: `${rs.stockReturn >= 0 ? '+' : ''}${rs.stockReturn.toFixed(1)}% vs index ${rs.indexReturn >= 0 ? '+' : ''}${rs.indexReturn.toFixed(1)}% over ${S.SWING_RS_LOOKBACK_DAYS}d`,
+        label: "RS LEADER",
+        detail: `${rs.stockReturn >= 0 ? "+" : ""}${rs.stockReturn.toFixed(1)}% vs index ${rs.indexReturn >= 0 ? "+" : ""}${rs.indexReturn.toFixed(1)}% over ${S.SWING_RS_LOOKBACK_DAYS}d`,
         entry: null,
         structuralStop: null,
       });
@@ -306,6 +343,9 @@ async function evaluateSwingSignals(symbol, indexReturnPct, opts = {}) {
       emaFast: last.emaFast,
       emaMid: last.emaMid,
       emaSlow: last.emaSlow,
+      // Which bar these were evaluated against - useful when a result looks
+      // surprising and you need to know whether it used today or yesterday.
+      evaluatedBarTime: last.time || null,
     };
   } catch (e) {
     console.error(`evaluateSwingSignals error [${symbol}]: ${e.message}`);

@@ -18,6 +18,7 @@ const {
   requirePrivate,
   PUBLIC_MODE,
 } = require("../middleware/auth");
+const { getMarketStatus } = require("../services/marketStatus");
 
 router.get("/health", (req, res) => {
   const state = swingState.getState();
