@@ -14,7 +14,7 @@ A production-style Node.js + Express market intelligence platform for detecting 
 
 ### APi Docs
 
-![Scanner Analytics](src/docs/APiDocs.png)
+![Scanner Analytics](src/docs/ApiDocs.png)
 
 A market scanner for NSE equities with two independent modes sharing one
 codebase:
