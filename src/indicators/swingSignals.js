@@ -16,9 +16,9 @@
  * null/false rather than throwing, so one bad symbol never kills a scan.
  */
 
-const { getHist, INTERVAL } = require("../services/tvHistory");
-const { annotateSwing } = require("./swingTa");
-const S = require("../config/swingConstants");
+const { getHist, INTERVAL } = require('../services/tvHistory');
+const { annotateSwing } = require('./swingTa');
+const S = require('../config/swingConstants');
 
 const mean = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
 
@@ -39,12 +39,7 @@ const mean = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
  * scheduled run is pinned to after the close.
  */
 async function loadDaily(symbol, { dropPartialBar = false } = {}) {
-  const candles = await getHist(
-    symbol,
-    "NSE",
-    INTERVAL.IN_DAILY,
-    S.SWING_DAILY_BARS,
-  );
+  const candles = await getHist(symbol, 'NSE', INTERVAL.IN_DAILY, S.SWING_DAILY_BARS);
   if (!candles || candles.length < 60) return null;
 
   const usable = dropPartialBar ? candles.slice(0, -1) : candles;
@@ -70,7 +65,7 @@ function maStack(candles) {
   if (!(last.emaFast > last.emaMid)) return null;
   if (!(last.emaMid > last.emaSlow)) return null;
   if (!(last.emaFast > prior.emaFast)) return null; // fast MA rising
-  if (!(last.emaMid > prior.emaMid)) return null; // mid MA rising
+  if (!(last.emaMid > prior.emaMid)) return null;   // mid MA rising
 
   return {
     close: last.close,
@@ -140,9 +135,7 @@ function maPullback(candles) {
 
   // Must actually have pulled back from a recent high, not just be drifting
   // sideways at the MA.
-  const recentHigh = Math.max(
-    ...candles.slice(-S.SWING_BASE_LOOKBACK_DAYS).map((c) => c.high),
-  );
+  const recentHigh = Math.max(...candles.slice(-S.SWING_BASE_LOOKBACK_DAYS).map((c) => c.high));
   const depthPct = ((recentHigh - last.close) / recentHigh) * 100;
   if (depthPct <= 0) return null;
   if (depthPct > S.SWING_PULLBACK_MAX_DEPTH_PCT) return null; // too deep - breakdown, not pullback
@@ -226,17 +219,9 @@ function rsLeader(candles, indexReturnPct) {
  * partial-bar return would bias every RS reading in whichever direction the
  * index happens to be moving today.
  */
-async function getIndexReturn(
-  symbol = "NIFTY",
-  { dropPartialBar = false } = {},
-) {
+async function getIndexReturn(symbol = 'NIFTY', { dropPartialBar = false } = {}) {
   try {
-    const raw = await getHist(
-      symbol,
-      "NSE",
-      INTERVAL.IN_DAILY,
-      S.SWING_RS_LOOKBACK_DAYS + 10,
-    );
+    const raw = await getHist(symbol, 'NSE', INTERVAL.IN_DAILY, S.SWING_RS_LOOKBACK_DAYS + 10);
     if (!raw) return null;
 
     const candles = dropPartialBar ? raw.slice(0, -1) : raw;
@@ -275,7 +260,7 @@ async function evaluateSwingSignals(symbol, indexReturnPct, opts = {}) {
     const bb = baseBreakout(candles);
     if (bb) {
       signals.push({
-        label: "BASE BREAKOUT",
+        label: 'BASE BREAKOUT',
         detail: `Broke ${bb.baseRangePct.toFixed(1)}%-tight ${S.SWING_BASE_LOOKBACK_DAYS}d base @ ₹${bb.baseHigh.toFixed(2)} on ${bb.volumeRatio.toFixed(1)}x volume`,
         entry: bb.price,
         structuralStop: bb.structuralStop,
@@ -285,7 +270,7 @@ async function evaluateSwingSignals(symbol, indexReturnPct, opts = {}) {
     const pb = maPullback(candles);
     if (pb) {
       signals.push({
-        label: "MA PULLBACK",
+        label: 'MA PULLBACK',
         detail: `Pulled back ${pb.depthFromHighPct.toFixed(1)}% from ₹${pb.recentHigh.toFixed(2)} into ${pb.maLabel}`,
         entry: pb.price,
         structuralStop: pb.structuralStop,
@@ -295,7 +280,7 @@ async function evaluateSwingSignals(symbol, indexReturnPct, opts = {}) {
     const stack = maStack(candles);
     if (stack) {
       signals.push({
-        label: "MA STACK",
+        label: 'MA STACK',
         detail: `Price > EMA${S.SWING_EMA_FAST} > EMA${S.SWING_EMA_MID} > EMA${S.SWING_EMA_SLOW}, rising`,
         entry: null,
         structuralStop: null,
@@ -305,7 +290,7 @@ async function evaluateSwingSignals(symbol, indexReturnPct, opts = {}) {
     const h52 = near52WeekHigh(candles);
     if (h52) {
       signals.push({
-        label: "52W HIGH",
+        label: '52W HIGH',
         detail: `${h52.distancePct.toFixed(1)}% below 52w high ₹${h52.high52.toFixed(2)}`,
         entry: null,
         structuralStop: null,
@@ -315,7 +300,7 @@ async function evaluateSwingSignals(symbol, indexReturnPct, opts = {}) {
     const dry = volumeDryUp(candles);
     if (dry) {
       signals.push({
-        label: "VOLUME DRYUP",
+        label: 'VOLUME DRYUP',
         detail: `Recent volume ${(dry.ratio * 100).toFixed(0)}% of base average`,
         entry: null,
         structuralStop: null,
@@ -325,8 +310,8 @@ async function evaluateSwingSignals(symbol, indexReturnPct, opts = {}) {
     const rs = rsLeader(candles, indexReturnPct);
     if (rs) {
       signals.push({
-        label: "RS LEADER",
-        detail: `${rs.stockReturn >= 0 ? "+" : ""}${rs.stockReturn.toFixed(1)}% vs index ${rs.indexReturn >= 0 ? "+" : ""}${rs.indexReturn.toFixed(1)}% over ${S.SWING_RS_LOOKBACK_DAYS}d`,
+        label: 'RS LEADER',
+        detail: `${rs.stockReturn >= 0 ? '+' : ''}${rs.stockReturn.toFixed(1)}% vs index ${rs.indexReturn >= 0 ? '+' : ''}${rs.indexReturn.toFixed(1)}% over ${S.SWING_RS_LOOKBACK_DAYS}d`,
         entry: null,
         structuralStop: null,
       });

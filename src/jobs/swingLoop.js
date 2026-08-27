@@ -34,7 +34,7 @@ const journal = require("../state/signalJournal");
 const eventStream = require("../services/eventStream");
 const pushClient = require("../services/pushClient");
 const S = require("../config/swingConstants");
-const { getMarketStatus } = require("../services/marketStatus");
+
 let running = false;
 let timer = null;
 let scanning = false; // guards against a second scan starting while one is mid-flight
@@ -103,9 +103,7 @@ async function scanForEntries(dateKey) {
   for (const symbol of symbols) {
     if (swingState.alreadyAlerted(dateKey, symbol)) continue;
 
-    const result = await evaluateSwingSignals(symbol, indexReturn, {
-      dropPartialBar: getMarketStatus().isOpen,
-    });
+    const result = await evaluateSwingSignals(symbol, indexReturn);
     if (!result) continue;
     if (result.signals.length < S.SWING_CONFLUENCE_MIN_SIGNALS) continue;
 
@@ -185,7 +183,18 @@ async function scanForEntries(dateKey) {
         symbol,
         signals: signals.map((s) => s.label),
         price: close,
-        confluence: signals.length >= S.SWING_CONFLUENCE_MIN_SIGNALS,
+        // A "cleared the gate" label should mean what it says: enough
+        // signals agreed AND at least one of them carried a real entry/stop.
+        // Signal count alone lets three purely contextual signals (MA STACK,
+        // 52W HIGH, RS LEADER) mark themselves as confluence - and those
+        // three aren't independent evidence to begin with. A stock making a
+        // 52-week high is close to guaranteed to also show RS LEADER and MA
+        // STACK, since all three are different measurements of the same
+        // "healthy uptrend" fact. Requiring entrySignal keeps the label tied
+        // to something that could actually be sized.
+        confluence:
+          Boolean(entrySignal) &&
+          signals.length >= S.SWING_CONFLUENCE_MIN_SIGNALS,
         levels: entrySignal
           ? { entry: entrySignal.entry, stop: entrySignal.structuralStop }
           : null,
