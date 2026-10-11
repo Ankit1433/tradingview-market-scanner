@@ -16,18 +16,24 @@ const { getStocks, getEarlyStocks } = require('../services/tvScanner');
 const { updateMomentum, momentumScore } = require('../trading/momentum');
 const { volumeExplosion } = require('../trading/volume');
 const {
-  trendScore,
   pullbackEntry,
   vwapReclaim,
   noPullbackTrend,
   afternoonBreakout,
   analyzeStock,
   getOrb,
-  calculateScore,
 } = require('../indicators/signals');
 const { openPosition, managePosition } = require('../trading/positionManager');
 const { getNiftyChange } = require('../services/nifty');
-const { safeSend, fmtInfo, processTelegramCommands } = require('../services/telegram');
+const {
+  safeSend,
+  fmtInfo,
+  fmtTradePlan,
+  fmtSimulatedPosition,
+  fmtPulseTitle,
+  escapeTelegramHtml,
+  processTelegramCommands,
+} = require('../services/telegram');
 const { nowIST, isWeekend, toMinutes } = require('../config/timeUtils');
 const journal = require('../state/signalJournal');
 const eventStream = require('../services/eventStream');
@@ -55,26 +61,11 @@ function topSectors(counter, n = 5) {
 }
 
 function buildCloseSummary(dateLabel) {
-  const sectorLines =
-    topSectors(state.lastSectorCounter)
-      .map(([sec, cnt]) => `  ${sec}: ${cnt}`)
-      .join('\n') || '  (no data)';
   const pnl = state.totalRealizedPnl;
   return (
-    `🔴 MARKET CLOSED — Daily Summary (${dateLabel})\n` +
-    `👀 Final tracked: ${state.lastTrackedCount} stocks\n` +
-    `🚀 New alerts: ${state.newAlertCount}  |  ❌ Removed: ${state.removedAlertCount}\n` +
-    `🎯 Pullbacks: ${state.pullbackAlerted.size}  |  🔥 ORB breakouts: ${state.orbAlerted.size}\n` +
-    `⚡ Momentum: ${state.momentumAlerted.size}  |  📊 Volume spikes: ${state.volumeAlerted.size}\n` +
-    `📈 VWAP reclaims: ${state.vwapAlerted.size}  |  💎 Strong setups: ${state.confluenceAlertCount}\n` +
-    `🏃 No-pullback runners: ${state.noPullbackAlerted.size}\n` +
-    `🌇 Afternoon breakouts: ${state.afternoonBreakoutAlerted.size}\n` +
-    `—— Trade tracker ——\n` +
-    `📌 Positions opened: ${state.positionsOpenedCount}\n` +
-    `🛑 Stopped: ${state.stopHitCount}  |  🎯 Targets hit: ${state.targetHitCount}  |  ` +
-    `🏁 Trailed out: ${state.trailExitCount}  |  ⏰ Squared off: ${state.squareOffCount}\n` +
-    `💰 Realized P&L today: ₹${pnl >= 0 ? '+' : ''}${pnl.toFixed(0)}\n` +
-    `🏷 Top sectors today:\n${sectorLines}`
+    `🌆 MARKET PULSE · DAY WRAP\n${dateLabel}\n` +
+    `${state.lastTrackedCount} tracked · ${state.newAlertCount} new · ${state.confluenceAlertCount} strong\n` +
+    `📒 Paper: ${state.positionsOpenedCount} positions · P&L ₹${pnl >= 0 ? '+' : ''}${pnl.toFixed(0)}`
   );
 }
 
@@ -183,29 +174,8 @@ async function runCycle() {
         console.error(`analyzeStock error [${stock}]: ${e.message}`);
       }
 
-      let score = 0;
-      try {
-        score = calculateScore(info);
-      } catch (e) {
-        console.error(`calculateScore error [${stock}]: ${e.message}`);
-      }
-
-      let trend = 0;
-      try {
-        trend = (await trendScore(stock)) || 0;
-      } catch (e) {
-        console.error(`trendScore error [${stock}]: ${e.message}`);
-      }
-
-      score = Math.min(100, score + Math.floor(trend / 5));
-      if (analysis.breakout) score += 20;
-
       const rrValue = analysis.rr || 0;
-      let bonus = 0;
       const outperformingNifty = niftyChange !== null && (info.change || 0) > niftyChange;
-      if (outperformingNifty) bonus += C.RS_SCORE_BONUS;
-      if (rrValue >= C.RR_BONUS_THRESHOLD) bonus += C.RR_SCORE_BONUS;
-      score = Math.min(100, score + bonus);
 
       if (min(nowTime) >= min(C.MARKET_OPEN) && min(nowTime) <= min(C.ORB_WINDOW_END)) {
         try {
@@ -221,16 +191,17 @@ async function runCycle() {
       state.dayHigh[stock] = info.price;
       state.trailFired[stock] = false;
 
-      const msgLines = [`🚀 NEW STOCK — ${stock}`, fmtInfo(info), `⭐ Score: ${score}/100`];
+      const msgLines = [fmtPulseTitle('👀', 'PULSE WATCH', stock), fmtInfo(info)];
       if (rrValue > 0) {
-        msgLines.push(
-          `🎯 Entry ₹${info.price.toFixed(2)}  |  🛑 Stop ₹${analysis.support.toFixed(2)}  |  ` +
-            `🏁 Target ₹${analysis.target.toFixed(2)}  |  R:R ${rrValue.toFixed(2)}`,
-        );
+        msgLines.push(fmtTradePlan({
+          entry: info.price,
+          stop: analysis.support,
+          target: analysis.target,
+        }));
       }
       if (niftyChange !== null) {
         const diff = (info.change || 0) - niftyChange;
-        msgLines.push(`💪 RS vs Nifty: ${diff >= 0 ? '+' : ''}${diff.toFixed(2)}%`);
+        msgLines.push(`RS vs NIFTY ${diff >= 0 ? '+' : ''}${diff.toFixed(1)}%`);
       }
 
       // Position-opening intentionally NOT done here - a NEW alert alone is
@@ -244,7 +215,7 @@ async function runCycle() {
       } else if (!inAlertWindow) {
         console.log(`Skipping NEW alert for ${stock}: outside alert window`);
       } else {
-        await safeSend(msg);
+        await safeSend(msg, { chartSymbol: stock, parseMode: 'HTML' });
         state.newAlertCount += 1;
       }
     }
@@ -265,7 +236,8 @@ async function runCycle() {
           if (pullbackPct >= C.TRAIL_PULLBACK_PCT) {
             if (inAlertWindow) {
               await safeSend(
-                `⚠️ PULLBACK FROM HIGH — ${stock}\n${fmtInfo(info)}\n📉 -${pullbackPct.toFixed(1)}% from day high ₹${dh.toFixed(2)}`,
+                `${fmtPulseTitle('↘️', 'PULLBACK', stock)}\n${fmtInfo(info)}\n${pullbackPct.toFixed(1)}% below high ₹${dh.toFixed(2)}`,
+                { chartSymbol: stock, parseMode: 'HTML' },
               );
             }
             state.trailFired[stock] = true;
@@ -418,26 +390,33 @@ async function runCycle() {
       if (inAlertWindow || inAfternoonWindow) {
         let msg;
         if (candidates.length >= C.CONFLUENCE_MIN_SIGNALS) {
-          const labels = candidates.map((c) => `${C.SIGNAL_EMOJI[c.label] || '🔔'} ${c.label}`).join(' + ');
-          const details = candidates.map((c) => `  ${C.SIGNAL_EMOJI[c.label] || '🔔'} ${c.detail}`).join('\n');
-          msg = `💎 STRONG SETUP — ${stock}\n${fmtInfo(info)}\n${labels}\n${details}`;
+          const labels = candidates.slice(0, 3).map((c) => escapeTelegramHtml(c.label)).join(' + ');
+          msg = `${fmtPulseTitle('💎', 'MARKET PULSE', stock)}\nSTRONG · ${labels}\n${fmtInfo(info)}`;
           state.confluenceAlertCount += 1;
           state.confluenceAlertedStocks.add(stock);
         } else {
           const c = candidates[0];
-          const emoji = C.SIGNAL_EMOJI[c.label] || '🔔';
-          msg = `${emoji} ${c.label} — ${stock}\n${fmtInfo(info)}\n${c.detail}`;
+          msg = `${fmtPulseTitle('⚡', 'MARKET PULSE', stock)}\n${escapeTelegramHtml(c.label)}\n${fmtInfo(info)}`;
+        }
+
+        const plannedSignal = candidates.find((candidate) => candidate.entryStop);
+        if (plannedSignal) {
+          const [entry, stop] = plannedSignal.entryStop;
+          msg += `\n${fmtTradePlan({ entry, stop, target: entry + C.TARGET_POINTS_LOW })}`;
         }
 
         if (newlyOpened) {
-          const partialQty = Math.floor(newlyOpened.qty * C.PARTIAL_EXIT_FRACTION);
-          msg +=
-            `\n📐 Qty ${newlyOpened.qty} | Risk ₹${newlyOpened.actualRisk.toFixed(0)} (stop ₹${newlyOpened.stop.toFixed(2)})\n` +
-            `  Plan: book ${partialQty} qty @ ₹${(newlyOpened.entry + C.TARGET_POINTS_LOW).toFixed(2)} ` +
-            `(entry +${C.TARGET_POINTS_LOW}pts), trail remaining ${newlyOpened.qty - partialQty}`;
+          msg += `\n${fmtSimulatedPosition({
+            qty: newlyOpened.qty,
+            risk: newlyOpened.actualRisk,
+          })}`;
+        } else if (state.openPositions[stock] && !state.openPositions[stock].closed) {
+          msg += '\n📒 Already paper-tracked';
+        } else {
+          msg += '\n👀 Watch only';
         }
 
-        await safeSend(msg);
+        await safeSend(msg, { chartSymbol: stock, parseMode: 'HTML' });
 
         // Persist + push. Wrapped so a journal or stream failure can never
         // take down the scan cycle - alerting is the primary job here, the

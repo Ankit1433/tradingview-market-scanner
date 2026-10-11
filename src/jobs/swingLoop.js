@@ -25,10 +25,14 @@ const {
 const {
   openPosition,
   managePosition,
-  openPositionCount,
-  totalCapitalDeployed,
 } = require("../trading/swingPositionManager");
-const { safeSend } = require("../services/telegram");
+const {
+  safeSend,
+  fmtTradePlan,
+  fmtSimulatedPosition,
+  fmtPulseTitle,
+  escapeTelegramHtml,
+} = require("../services/telegram");
 const { nowIST, isWeekend, toMinutes } = require("../config/timeUtils");
 const journal = require("../state/signalJournal");
 const eventStream = require("../services/eventStream");
@@ -122,22 +126,13 @@ async function scanForEntries(dateKey) {
   for (const result of found) {
     const { symbol, signals, close, atr, rsi, info } = result;
 
-    const labels = signals
-      .map((s) => `${S.SWING_SIGNAL_EMOJI[s.label] || "🔔"} ${s.label}`)
-      .join(" + ");
-    const details = signals
-      .map((s) => `  ${S.SWING_SIGNAL_EMOJI[s.label] || "🔔"} ${s.detail}`)
-      .join("\n");
-
     const lines = [
-      `📊 SWING SETUP — ${symbol}`,
-      `💰 ₹${close.toFixed(2)}  |  ATR ₹${atr.toFixed(2)}  |  RSI ${rsi ? rsi.toFixed(0) : "-"}`,
-      info?.sector ? `🏷 ${info.sector}` : null,
+      fmtPulseTitle("🌙", "MARKET PULSE", symbol),
+      `₹${close.toFixed(2)} · RSI ${rsi ? rsi.toFixed(0) : "—"}`,
       info?.perf3Month !== undefined
-        ? `📈 3M: ${info.perf3Month >= 0 ? "+" : ""}${info.perf3Month.toFixed(1)}%`
+        ? `3M ${info.perf3Month >= 0 ? "+" : ""}${info.perf3Month.toFixed(1)}%`
         : null,
-      labels,
-      details,
+      signals.map((s) => escapeTelegramHtml(s.label)).join(" + "),
     ].filter(Boolean);
 
     // Only structural signals can define an entry stop
@@ -159,22 +154,28 @@ async function scanForEntries(dateKey) {
 
       if (outcome.sizing) {
         const sz = outcome.sizing;
-        const partialQty = Math.floor(sz.qty * S.SWING_PARTIAL_EXIT_FRACTION);
         lines.push(
-          `📐 Qty ${sz.qty} | Risk ₹${sz.actualRisk.toFixed(0)} | Capital ₹${sz.capitalUsed.toFixed(0)}`,
-          `🛑 Stop ₹${sz.stop.toFixed(2)} (${sz.basis}, ${sz.stopDistance.toFixed(2)}/share)`,
-          `🎯 Target ₹${sz.target.toFixed(2)} (${sz.rMultiple}R) — book ${partialQty}, trail ${sz.qty - partialQty}`,
+          fmtTradePlan({
+            entry: sz.entry,
+            stop: sz.stop,
+            target: sz.target,
+          }),
+          fmtSimulatedPosition({
+            qty: sz.qty,
+            risk: sz.actualRisk,
+          }),
         );
       } else {
-        lines.push(`⚠️ Not sized: ${outcome.rejected}`);
+        lines.push("⚠️ Not paper-tracked");
       }
     } else {
-      lines.push(
-        "ℹ️ Context signals only — no structural entry level, not sized",
-      );
+      lines.push("ℹ️ No entry levels");
     }
 
-    await safeSend(lines.join("\n"));
+    await safeSend(lines.filter(Boolean).join("\n"), {
+      chartSymbol: symbol,
+      parseMode: "HTML",
+    });
 
     // Persist + push, same defensive wrapping as the intraday side.
     try {
@@ -236,7 +237,6 @@ async function runSwingScan({ force = false } = {}) {
     }
 
     console.log(`[swing] starting daily scan for ${dateKey}`);
-    await safeSend(`🔍 SWING SCAN STARTED — ${dateKey}`);
     eventStream.broadcast("scan_status", {
       mode: "swing",
       status: "started",
@@ -250,24 +250,13 @@ async function runSwingScan({ force = false } = {}) {
     swingState.save();
 
     const openList = swingState.openPositionsList();
-    const openLines =
-      openList
-        .map((p) => {
-          const stage = p.partialBooked ? "runner" : "full";
-          const qty = p.partialBooked ? p.runnerQty : p.qty;
-          return `  ${p.symbol} [${stage}] ${qty} qty | entry ₹${p.entry.toFixed(2)} | stop ₹${p.stop.toFixed(2)} | ${p.barsHeld}d`;
-        })
-        .join("\n") || "  (none)";
-
     const pnl = state.totalRealizedPnl;
+    const openSymbols = openList.map((p) => p.symbol).join(" · ") || "None";
     const summary =
-      `📋 SWING SCAN COMPLETE — ${dateKey}\n` +
-      `🔎 Screened: ${scanned}  |  🆕 New setups: ${alerted}\n` +
-      `📌 Open positions (${openList.length}/${S.SWING_MAX_OPEN_POSITIONS}):\n${openLines}\n` +
-      `💵 Capital deployed: ₹${totalCapitalDeployed().toFixed(0)} / ₹${S.SWING_TOTAL_CAPITAL}\n` +
-      `💰 Realized P&L (all time): ₹${pnl >= 0 ? "+" : ""}${pnl.toFixed(0)}\n` +
-      `📊 Opened ${state.counters.positionsOpened} | 🛑 ${state.counters.stopHits} | ` +
-      `🎯 ${state.counters.targetHits} | 🏁 ${state.counters.trailExits} | ⏳ ${state.counters.timeStops}`;
+      `🌙 MARKET PULSE · SWING WRAP\n${dateKey}\n` +
+      `${scanned} scanned · ${alerted} setups · ${openList.length}/${S.SWING_MAX_OPEN_POSITIONS} open\n` +
+      `Open: ${openSymbols}\n` +
+      `📒 Paper P&L ₹${pnl >= 0 ? "+" : ""}${pnl.toFixed(0)}`;
 
     await safeSend(summary);
 

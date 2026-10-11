@@ -10,7 +10,17 @@ const { state } = require("../state/dailyState");
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
-async function sendMessage(message) {
+function tradingViewKeyboard(symbol) {
+  const ticker = String(symbol || "").replace(/^NSE:/, "");
+  return {
+    inline_keyboard: [[{
+      text: "Open TradingView ↗",
+      url: `https://www.tradingview.com/chart/?symbol=NSE%3A${encodeURIComponent(ticker)}`,
+    }]],
+  };
+}
+
+async function sendMessage(message, options = {}) {
   if (!BOT_TOKEN || !CHAT_ID) {
     console.warn(
       "[telegram] TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID not set - skipping send:",
@@ -19,11 +29,14 @@ async function sendMessage(message) {
     return;
   }
   const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
-  const res = await axios.post(url, {
+  const payload = {
     chat_id: CHAT_ID,
     text: message,
     disable_web_page_preview: true,
-  });
+  };
+  if (options.chartSymbol) payload.reply_markup = tradingViewKeyboard(options.chartSymbol);
+  if (options.parseMode) payload.parse_mode = options.parseMode;
+  const res = await axios.post(url, payload);
   if (res.status !== 200) console.log(res.data);
 }
 
@@ -54,14 +67,14 @@ const queue = [];
 let draining = false;
 let lastSendAt = 0;
 
-function enqueue(msg) {
+function enqueue(msg, options = {}) {
   if (queue.length >= MAX_QUEUE) {
     const dropped = queue.shift();
     console.warn(
       `[telegram] queue full (${MAX_QUEUE}) - dropped oldest alert: ${dropped.msg.split("\n")[0]}`,
     );
   }
-  queue.push({ msg, attempts: 0 });
+  queue.push({ msg, options, attempts: 0 });
   drain();
 }
 
@@ -77,7 +90,7 @@ async function drain() {
     lastSendAt = Date.now();
 
     try {
-      await sendMessage(item.msg);
+      await sendMessage(item.msg, item.options);
     } catch (e) {
       const status = e.response?.status;
 
@@ -118,8 +131,8 @@ async function drain() {
  * order over the next several seconds instead of mostly being dropped to
  * 429s.
  */
-async function safeSend(msg) {
-  enqueue(msg);
+async function safeSend(msg, options = {}) {
+  enqueue(msg, options);
 }
 
 /** Current backlog size - exposed for /api/public/health if useful later. */
@@ -127,19 +140,62 @@ function queueDepth() {
   return queue.length;
 }
 
-/** Shared price/change/volume/sector block, used on every alert type. Mirrors fmt_info(). */
+function numberOrNull(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function escapeTelegramHtml(value) {
+  return String(value).replace(/[&<>]/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+  })[char]);
+}
+
+function fmtPulseTitle(icon, label, symbol) {
+  return `<b>${icon} ${label} · ${escapeTelegramHtml(symbol)}</b>`;
+}
+
+function fmtPrice(value) {
+  const number = numberOrNull(value);
+  return number === null
+    ? "—"
+    : `₹${number.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/** Compact market snapshot shared by intraday alerts. */
 function fmtInfo(info) {
-  const price = info.price || 0;
-  const change = info.change || 0;
-  const relVol = info.relVolume || 0;
-  const sector = info.sector || "-";
-  return `💰 ₹${price.toFixed(2)}  |  📈 ${change >= 0 ? "+" : ""}${change.toFixed(2)}%  |  📊 ${relVol.toFixed(1)}x vol\n🏷 ${sector}`;
+  const price = fmtPrice(info?.price);
+  const change = numberOrNull(info?.change);
+  const relVol = numberOrNull(info?.relVolume);
+  const dayChange = change === null ? "—" : `${change >= 0 ? "+" : ""}${change.toFixed(1)}%`;
+  const relativeVolume = relVol === null ? "—" : `${relVol.toFixed(1)}x`;
+  return `${price} · ${dayChange} · RVOL ${relativeVolume}`;
+}
+
+/** Price levels only describe a plan; the scanner does not place broker orders. */
+function fmtTradePlan({ entry, stop, target } = {}) {
+  const entryValue = numberOrNull(entry);
+  const stopValue = numberOrNull(stop);
+  const targetValue = numberOrNull(target);
+  let rr = "";
+  if (entryValue !== null && stopValue !== null && targetValue !== null && entryValue > stopValue) {
+    const multiple = (targetValue - entryValue) / (entryValue - stopValue);
+    rr = ` · ${Number(multiple.toFixed(1))}R`;
+  }
+  return `Entry ${fmtPrice(entry)} · SL ${fmtPrice(stop)} · TP ${fmtPrice(target)}${rr}`;
+}
+
+function fmtSimulatedPosition({ qty, risk } = {}) {
+  return `📒 Paper · ${qty} shares · risk ${fmtPrice(risk)}`;
 }
 
 function fmtStockLine(stock, info) {
-  const price = info.price || 0;
-  const change = info.change || 0;
-  return `${stock}: ₹${price.toFixed(2)} (${change >= 0 ? "+" : ""}${change.toFixed(2)}%)`;
+  const change = numberOrNull(info?.change);
+  const dayChange = change === null ? "—" : `${change >= 0 ? "+" : ""}${change.toFixed(2)}%`;
+  return `${stock}  ${fmtPrice(info?.price)}  |  ${dayChange}`;
 }
 
 function stocksFor(alertedSet, label, emoji) {
@@ -173,18 +229,19 @@ function cmdPositions() {
   const openOnes = Object.entries(state.openPositions).filter(
     ([, p]) => !p.closed,
   );
-  if (openOnes.length === 0) return "📌 No open positions right now.";
+  if (openOnes.length === 0) return "📌 No simulated intraday positions are open.";
   const lines = openOnes.map(([s, p]) => {
     const curPrice = state.current[s] ? state.current[s].price : p.entry;
     const qty = p.partialBooked ? p.runnerQty : p.qty;
     const unrealized = qty * (curPrice - p.entry);
     const stage = p.partialBooked ? "runner (partial booked)" : "full position";
     return (
-      `${s} [${stage}]: entry ₹${p.entry.toFixed(2)}  qty ${qty}  ` +
-      `stop ₹${p.stop.toFixed(2)}  unrealized ₹${unrealized >= 0 ? "+" : ""}${unrealized.toFixed(0)}`
+      `${s} · ${stage} · ${qty} shares\n` +
+      `  Entry ${fmtPrice(p.entry)} | Now ${fmtPrice(curPrice)} | Stop ${fmtPrice(p.stop)} | Target ${fmtPrice(p.target)}\n` +
+      `  Open P&L ≈ ₹${unrealized >= 0 ? "+" : ""}${unrealized.toFixed(0)}`
     );
   });
-  return `📌 Open positions:\n${lines.join("\n")}`;
+  return `📌 Simulated intraday positions (${openOnes.length})\n${lines.join("\n")}\n\nNo broker orders are placed.`;
 }
 
 // ---------- Swing commands ----------
@@ -196,7 +253,7 @@ function cmdSwingPositions() {
   const swingState = require("../state/swingState");
   const S = require("../config/swingConstants");
   const open = swingState.openPositionsList();
-  if (open.length === 0) return "📊 No open swing positions.";
+  if (open.length === 0) return "📊 No simulated swing positions are open.";
 
   const lines = open.map((p) => {
     const stage = p.partialBooked ? "runner" : "full";
@@ -206,12 +263,12 @@ function cmdSwingPositions() {
         ? ((p.highest - p.entry) / p.riskPerShare).toFixed(2)
         : "-";
     return (
-      `${p.symbol} [${stage}] ${qty} qty\n` +
-      `  entry ₹${p.entry.toFixed(2)} | stop ₹${p.stop.toFixed(2)} | target ₹${p.target.toFixed(2)}\n` +
+      `${p.symbol} · ${stage} · ${qty} shares\n` +
+      `  Entry ${fmtPrice(p.entry)} | Stop ${fmtPrice(p.stop)} | Target ${fmtPrice(p.target)}\n` +
       `  ${p.barsHeld}d held | peak ${rNow}R | ${(p.signals || []).join(", ")}`
     );
   });
-  return `📊 Swing positions (${open.length}/${S.SWING_MAX_OPEN_POSITIONS}):\n${lines.join("\n")}`;
+  return `📊 Simulated swing positions (${open.length}/${S.SWING_MAX_OPEN_POSITIONS})\n${lines.join("\n")}\n\nNo broker orders are placed.`;
 }
 
 function cmdSwingStats() {
@@ -256,6 +313,7 @@ function cmdHelp() {
     "/swing - open swing positions",
     "/swingstats - swing win rate and P&L",
     "",
+    "Signals and positions are simulated tracking only; no broker orders are placed.",
     "/help - this list",
   ].join("\n");
 }
@@ -329,4 +387,8 @@ module.exports = {
   cmdSwingPositions,
   cmdSwingStats,
   cmdHelp,
+  fmtTradePlan,
+  fmtSimulatedPosition,
+  fmtPulseTitle,
+  escapeTelegramHtml,
 };

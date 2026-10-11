@@ -87,7 +87,7 @@ async function managePosition(stock, price, nowTime, safeSend) {
     state.totalRealizedPnl += pnl;
     state.squareOffCount += 1;
     await safeSend(
-      `⏰ SQUARE OFF — ${stock}\nExit ${qtyLeft} qty @ ₹${price.toFixed(2)} (≈ ₹${pnl >= 0 ? '+' : ''}${pnl.toFixed(0)})`,
+      `⏰ PAPER FLAT · ${stock}\n${qtyLeft} sh @ ₹${price.toFixed(2)} · P&L ₹${pnl >= 0 ? '+' : ''}${pnl.toFixed(0)}`,
     );
     pos.closed = true;
     return;
@@ -99,7 +99,7 @@ async function managePosition(stock, price, nowTime, safeSend) {
       state.totalRealizedPnl -= loss;
       state.stopHitCount += 1;
       await safeSend(
-        `🛑 STOP HIT — ${stock}\nExit ${pos.qty} qty @ ₹${pos.stop.toFixed(2)}\nLoss ≈ ₹${loss.toFixed(0)}`,
+        `🛑 PAPER STOP · ${stock}\n${pos.qty} sh @ ₹${pos.stop.toFixed(2)} · −₹${loss.toFixed(0)}`,
       );
       pos.closed = true;
     } else if (price >= pos.target) {
@@ -109,9 +109,9 @@ async function managePosition(stock, price, nowTime, safeSend) {
       state.totalRealizedPnl += profit;
       state.targetHitCount += 1;
       await safeSend(
-        `🎯 TARGET HIT — ${stock}\n` +
-          `Book ${partialQty} qty @ ₹${pos.target.toFixed(2)} (≈ ₹${profit.toFixed(0)} booked)\n` +
-          `Let ${runnerQty} qty ride, stop moved to breakeven ₹${pos.entry.toFixed(2)}`,
+        `🎯 PAPER TARGET · ${stock}\n` +
+          `Book ${partialQty} @ ₹${pos.target.toFixed(2)} · +₹${profit.toFixed(0)}\n` +
+          `${runnerQty} sh left · SL → ₹${pos.entry.toFixed(2)}`,
       );
       pos.partialBooked = true;
       pos.runnerQty = runnerQty;
@@ -124,7 +124,7 @@ async function managePosition(stock, price, nowTime, safeSend) {
     } else if (price <= pos.stop) {
       state.trailExitCount += 1;
       await safeSend(
-        `🏁 RUNNER STOPPED AT BREAKEVEN — ${stock}\nExit remaining ${pos.runnerQty} qty @ ₹${pos.stop.toFixed(2)}`,
+        `🏁 PAPER FLAT · ${stock}\n${pos.runnerQty} sh @ breakeven ₹${pos.stop.toFixed(2)}`,
       );
       pos.closed = true;
     } else if (price <= pos.highest * (1 - TRAIL_PULLBACK_PCT / 100)) {
@@ -132,7 +132,7 @@ async function managePosition(stock, price, nowTime, safeSend) {
       state.totalRealizedPnl += profit;
       state.trailExitCount += 1;
       await safeSend(
-        `🏁 TRAIL EXIT — ${stock}\nExit remaining ${pos.runnerQty} qty @ ₹${price.toFixed(2)} (≈ ₹${profit.toFixed(0)})`,
+        `🏁 PAPER TRAIL · ${stock}\n${pos.runnerQty} sh @ ₹${price.toFixed(2)} · ₹${profit >= 0 ? '+' : ''}${profit.toFixed(0)}`,
       );
       pos.closed = true;
     }

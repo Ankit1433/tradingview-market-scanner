@@ -165,7 +165,7 @@ function managePosition(symbol, close, atr) {
       const loss = closeOut(symbol, pos, pos.stop, pos.qty, 'stop', state);
       state.counters.stopHits += 1;
       messages.push(
-        `🛑 SWING STOP — ${symbol}\nExit ${pos.qty} qty @ ₹${pos.stop.toFixed(2)}\nP&L ≈ ₹${loss.toFixed(0)} (${currentR.toFixed(2)}R)`,
+        `🛑 PAPER STOP · ${symbol}\n${pos.qty} sh @ ₹${pos.stop.toFixed(2)} · −₹${Math.abs(loss).toFixed(0)}`,
       );
     } else if (close >= pos.target) {
       const partialQty = Math.floor(pos.qty * S.SWING_PARTIAL_EXIT_FRACTION);
@@ -180,17 +180,15 @@ function managePosition(symbol, close, atr) {
       pos.highest = close;
 
       messages.push(
-        `🎯 SWING TARGET — ${symbol}\n` +
-          `Book ${partialQty} qty @ ₹${pos.target.toFixed(2)} (≈ ₹${profit.toFixed(0)}, ${S.SWING_TARGET_R_MULTIPLE}R)\n` +
-          `Let ${runnerQty} qty run, stop → breakeven ₹${pos.entry.toFixed(2)}`,
+        `🎯 PAPER TARGET · ${symbol}\n` +
+          `Book ${partialQty} @ ₹${pos.target.toFixed(2)} · +₹${profit.toFixed(0)}\n` +
+          `${runnerQty} sh left · SL → ₹${pos.entry.toFixed(2)}`,
       );
     } else if (pos.barsHeld >= S.SWING_TIME_STOP_DAYS && currentR < 1) {
       const pnl = closeOut(symbol, pos, close, pos.qty, 'time_stop', state);
       state.counters.timeStops += 1;
       messages.push(
-        `⏳ SWING TIME STOP — ${symbol}\n` +
-          `${pos.barsHeld} sessions held, still under 1R (${currentR.toFixed(2)}R)\n` +
-          `Exit ${pos.qty} qty @ ₹${close.toFixed(2)} (≈ ₹${pnl.toFixed(0)})`,
+        `⌛ PAPER TIME EXIT · ${symbol}\n${pos.barsHeld}d · ${pos.qty} sh @ ₹${close.toFixed(2)} · P&L ₹${pnl.toFixed(0)}`,
       );
     }
   } else {
@@ -204,14 +202,13 @@ function managePosition(symbol, close, atr) {
       const pnl = closeOut(symbol, pos, close, pos.runnerQty, 'trail', state);
       state.counters.trailExits += 1;
       messages.push(
-        `🏁 SWING TRAIL EXIT — ${symbol}\n` +
-          `Exit remaining ${pos.runnerQty} qty @ ₹${close.toFixed(2)} (≈ ₹${pnl.toFixed(0)}, ${currentR.toFixed(2)}R)`,
+        `🏁 PAPER TRAIL EXIT · ${symbol}\n${pos.runnerQty} sh @ ₹${close.toFixed(2)} · P&L ₹${pnl.toFixed(0)}`,
       );
     } else if (effectiveStop > pos.stop) {
+      const previousStop = pos.stop;
       pos.stop = effectiveStop;
       messages.push(
-        `📈 SWING TRAIL RAISED — ${symbol}\n` +
-          `Stop → ₹${effectiveStop.toFixed(2)} (peak ₹${pos.highest.toFixed(2)}, ${currentR.toFixed(2)}R open)`,
+        `📈 PAPER TRAIL · ${symbol}\nSL ₹${previousStop.toFixed(2)} → ₹${effectiveStop.toFixed(2)}`,
       );
     }
   }
