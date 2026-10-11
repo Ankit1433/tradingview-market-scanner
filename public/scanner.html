@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#080b11" />
+    <title>Scanner Workspace — NSE Market Scanner</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #080b11;
+        --panel: #0e141e;
+        --panel-2: #111a26;
+        --line: rgba(255,255,255,.085);
+        --line-2: rgba(255,255,255,.14);
+        --text: #f3f6fb;
+        --muted: #8e9bad;
+        --dim: #657286;
+        --green: #6ee7ac;
+        --red: #ff7d89;
+        --blue: #7bcfff;
+        --amber: #f4ca72;
+        --mono: "IBM Plex Mono", ui-monospace, monospace;
+        --sans: "DM Sans", system-ui, sans-serif;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        color: var(--text);
+        font: 14px/1.5 var(--sans);
+        background: radial-gradient(ellipse at 12% -16%, rgba(63,173,126,.14), transparent 34%), var(--bg);
+      }
+      button, input, select { font: inherit; }
+      button, a { -webkit-tap-highlight-color: transparent; }
+      a { color: inherit; text-decoration: none; }
+      .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+      .shell { width: min(1480px, calc(100% - 36px)); margin: 0 auto; padding: 18px 0 48px; }
+      .topbar {
+        min-height: 62px; display: flex; align-items: center; justify-content: space-between; gap: 20px;
+        padding: 10px 14px; border: 1px solid var(--line); border-radius: 15px;
+        background: rgba(11,15,22,.87); backdrop-filter: blur(16px); position: sticky; top: 12px; z-index: 5;
+      }
+      .brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
+      .brand-mark { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 11px; color: var(--green); font-weight: 800; background: #13251e; border: 1px solid rgba(110,231,172,.2); }
+      .brand-name { font-weight: 700; letter-spacing: -.02em; }
+      .brand-caption { color: var(--dim); font-size: 11px; margin-top: 1px; }
+      .nav { display: flex; align-items: center; gap: 5px; margin-right: auto; margin-left: 26px; }
+      .nav a { padding: 8px 12px; border-radius: 9px; color: var(--muted); font-size: 13px; }
+      .nav a.active { color: var(--text); background: rgba(255,255,255,.07); }
+      .top-status { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+      .pill { display: inline-flex; align-items: center; gap: 7px; min-height: 30px; padding: 0 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); background: rgba(255,255,255,.025); font: 11px var(--mono); white-space: nowrap; }
+      .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--dim); }
+      .dot.good { background: var(--green); box-shadow: 0 0 12px rgba(110,231,172,.45); }
+      .dot.warn { background: var(--amber); }
+      .dot.bad { background: var(--red); }
+      .intro { display: flex; justify-content: space-between; align-items: end; gap: 20px; margin: 32px 2px 18px; }
+      .eyebrow { color: var(--green); text-transform: uppercase; letter-spacing: .12em; font: 10px var(--mono); }
+      h1 { margin: 5px 0 4px; font-size: clamp(27px, 3vw, 37px); line-height: 1.1; letter-spacing: -.045em; }
+      .intro p { margin: 0; color: var(--muted); }
+      .refresh {
+        display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; padding: 0 13px;
+        color: var(--text); border: 1px solid var(--line-2); border-radius: 10px; background: var(--panel-2); cursor: pointer;
+      }
+      .refresh:hover { border-color: rgba(110,231,172,.36); }
+      .refresh:disabled { opacity: .6; cursor: wait; }
+      .metrics { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 11px; margin-bottom: 15px; }
+      .metric { min-height: 91px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 13px; background: linear-gradient(150deg, rgba(18,26,38,.94), rgba(12,17,25,.94)); }
+      .metric-label { color: var(--muted); font-size: 12px; }
+      .metric-value { margin-top: 5px; font: 600 25px/1.1 var(--mono); letter-spacing: -.04em; }
+      .metric-note { margin-top: 5px; color: var(--dim); font-size: 11px; }
+      .workspace { display: grid; grid-template-columns: minmax(0,1fr) 330px; gap: 14px; align-items: start; }
+      .panel { min-width: 0; border: 1px solid var(--line); border-radius: 14px; background: rgba(13,19,28,.94); overflow: hidden; }
+      .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 15px 17px; border-bottom: 1px solid var(--line); }
+      .panel-title { margin: 0; font-size: 14px; font-weight: 650; }
+      .panel-meta { color: var(--dim); font: 11px var(--mono); }
+      .toolbar { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; padding: 12px 15px; border-bottom: 1px solid var(--line); }
+      .search-wrap { position: relative; flex: 1 1 220px; min-width: 180px; }
+      .search-wrap span { position: absolute; left: 11px; top: 9px; color: var(--dim); }
+      .search, .select {
+        width: 100%; min-height: 37px; border: 1px solid var(--line); border-radius: 9px; outline: none;
+        color: var(--text); background: #0b1119;
+      }
+      .search { padding: 0 12px 0 33px; }
+      .select { width: auto; min-width: 130px; padding: 0 28px 0 10px; }
+      .search:focus, .select:focus { border-color: rgba(110,231,172,.48); }
+      .filter-group { display: flex; gap: 4px; padding: 3px; border: 1px solid var(--line); border-radius: 10px; background: #0b1119; }
+      .filter-btn { min-height: 29px; padding: 0 9px; border: 0; border-radius: 7px; color: var(--muted); background: transparent; cursor: pointer; font-size: 11px; }
+      .filter-btn.active { color: var(--text); background: #202a38; }
+      .table-wrap { overflow: auto; max-height: min(65vh, 700px); }
+      table { width: 100%; border-collapse: collapse; text-align: left; white-space: nowrap; }
+      th { position: sticky; top: 0; z-index: 1; padding: 10px 12px; color: var(--dim); background: #101722; font: 10px var(--mono); text-transform: uppercase; letter-spacing: .06em; }
+      td { padding: 12px; border-top: 1px solid rgba(255,255,255,.055); vertical-align: middle; }
+      tbody tr { cursor: pointer; transition: background .15s ease; }
+      tbody tr:hover, tbody tr.selected { background: rgba(110,231,172,.055); }
+      tbody tr.selected { box-shadow: inset 2px 0 var(--green); }
+      .symbol { font-weight: 700; letter-spacing: .01em; }
+      .subtext { display: block; margin-top: 2px; color: var(--dim); font-size: 10px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
+      .price { font-family: var(--mono); }
+      .positive { color: var(--green); }
+      .negative { color: var(--red); }
+      .neutral { color: var(--muted); }
+      .volume { font: 12px var(--mono); }
+      .signal-stack { display: flex; flex-wrap: wrap; gap: 4px; max-width: 230px; white-space: normal; }
+      .tag { display: inline-flex; align-items: center; padding: 3px 7px; border: 1px solid rgba(123,207,255,.2); border-radius: 999px; color: var(--blue); background: rgba(123,207,255,.06); font-size: 10px; line-height: 1.25; }
+      .tag.strong { color: var(--green); border-color: rgba(110,231,172,.24); background: rgba(110,231,172,.07); }
+      .tag.muted { color: var(--dim); border-color: var(--line); background: transparent; }
+      .level-cell { font: 11px var(--mono); color: var(--muted); }
+      .empty { min-height: 230px; display: grid; place-content: center; text-align: center; padding: 28px; color: var(--muted); }
+      .empty b { display: block; margin-bottom: 5px; color: var(--text); font-size: 14px; }
+      .empty a { display: inline-block; margin-top: 12px; color: var(--green); }
+      .detail { position: sticky; top: 92px; }
+      .detail-empty { min-height: 390px; display: grid; place-content: center; padding: 24px; text-align: center; color: var(--muted); }
+      .detail-empty .icon { font-size: 26px; color: var(--green); margin-bottom: 7px; }
+      .detail-body { padding: 17px; }
+      .detail-symbol-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+      .detail-symbol { font-size: 20px; font-weight: 700; letter-spacing: -.03em; }
+      .detail-sector { color: var(--muted); font-size: 11px; }
+      .detail-price { margin-top: 18px; font: 600 29px/1 var(--mono); letter-spacing: -.05em; }
+      .detail-change { margin-top: 6px; font: 12px var(--mono); }
+      .divider { height: 1px; margin: 17px 0; background: var(--line); }
+      .section-label { margin-bottom: 9px; color: var(--dim); font: 10px var(--mono); text-transform: uppercase; letter-spacing: .08em; }
+      .levels { display: grid; grid-template-columns: repeat(3,1fr); gap: 7px; }
+      .level { padding: 10px 8px; border: 1px solid var(--line); border-radius: 9px; background: rgba(255,255,255,.018); }
+      .level span { display: block; color: var(--dim); font-size: 10px; }
+      .level b { display: block; margin-top: 4px; font: 12px var(--mono); }
+      .level.entry b { color: var(--blue); }
+      .level.stop b { color: var(--red); }
+      .level.target b { color: var(--green); }
+      .detail-note { padding: 11px; border-radius: 9px; background: rgba(255,255,255,.025); color: var(--muted); font-size: 12px; }
+      .detail-note strong { color: var(--text); }
+      .chart-heading { display: flex; justify-content: space-between; gap: 8px; align-items: center; margin-bottom: 8px; }
+      .chart { min-height: 190px; padding: 7px 5px 3px; border: 1px solid var(--line); border-radius: 9px; background: rgba(4,8,13,.45); overflow: hidden; }
+      .chart svg { display: block; width: 100%; height: auto; }
+      .chart-loading, .chart-error { min-height: 174px; display: grid; place-content: center; text-align: center; color: var(--dim); font-size: 11px; }
+      .chart-error { color: var(--amber); }
+      .detail-actions { display: flex; margin-top: 12px; }
+      .text-link { color: var(--green); font-size: 12px; }
+      .stamp { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; color: var(--green); border: 1px solid rgba(110,231,172,.22); border-radius: 999px; background: rgba(110,231,172,.06); font-size: 10px; }
+      .notice { display: none; margin-bottom: 12px; padding: 10px 13px; border: 1px solid rgba(244,202,114,.22); border-radius: 10px; color: var(--amber); background: rgba(244,202,114,.05); font-size: 12px; }
+      .notice.visible { display: block; }
+      .footnote { display: flex; justify-content: space-between; gap: 10px; margin: 14px 3px 0; color: var(--dim); font-size: 11px; }
+      @media (max-width: 1050px) { .workspace { grid-template-columns: minmax(0,1fr) 300px; } .signal-stack { max-width: 160px; } }
+      @media (max-width: 820px) { .workspace { grid-template-columns: 1fr; } .detail { position: static; } .detail-empty { min-height: 180px; } .topbar { position: static; flex-wrap: wrap; } .nav { margin-left: auto; margin-right: 0; } .top-status { width: 100%; justify-content: flex-start; } }
+      @media (max-width: 560px) {
+        .shell { width: min(100% - 22px, 1480px); padding-top: 10px; }
+        .brand-caption { display: none; }
+        .nav { margin-left: auto; }
+        .nav a { padding: 7px 8px; font-size: 12px; }
+        .intro { align-items: flex-start; margin-top: 24px; }
+        .intro p { max-width: 260px; font-size: 12px; }
+        .refresh { min-width: 40px; padding: 0 10px; font-size: 0; }
+        .refresh span { font-size: 15px; }
+        .metrics { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+        .metric { min-height: 78px; padding: 11px; }
+        .metric-value { font-size: 21px; }
+        .toolbar { align-items: stretch; }
+        .filter-group { order: 3; width: 100%; }
+        .filter-btn { flex: 1; }
+        .select { flex: 1; min-width: 115px; }
+        .panel-head { padding: 13px; }
+        td { padding: 10px 9px; }
+        th { padding: 9px; }
+        .footnote { flex-direction: column; }
+      }
+      @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; } }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <a class="brand" href="/app" aria-label="Market Scanner workspace">
+          <div class="brand-mark">MS</div>
+          <div><div class="brand-name">Market Scanner</div><div class="brand-caption">NSE · Intraday workspace</div></div>
+        </a>
+        <nav class="nav" aria-label="Main navigation">
+          <a class="active" href="/app" aria-current="page">Scanner</a>
+          <a href="/journal">Journal</a>
+          <a href="/demo">Signal tape</a>
+        </nav>
+        <div class="top-status">
+          <span class="pill"><i class="dot" id="market-dot"></i><span id="market-label">Loading market…</span></span>
+          <span class="pill"><i class="dot" id="scanner-dot"></i><span id="scanner-label">Checking scanner…</span></span>
+          <span class="pill"><i class="dot" id="stream-dot"></i><span id="stream-label">Connecting feed…</span></span>
+        </div>
+      </header>
+
+      <main>
+        <section class="intro">
+          <div>
+            <div class="eyebrow">Live market workspace</div>
+            <h1>Intraday scanner</h1>
+            <p>Review the names in today’s live universe and inspect their latest logged setup.</p>
+          </div>
+          <button class="refresh" id="refresh" type="button"><span aria-hidden="true">↻</span> Refresh</button>
+        </section>
+
+        <div class="notice" id="notice" role="status"></div>
+
+        <section class="metrics" aria-label="Live scanner summary">
+          <article class="metric"><div class="metric-label">Live universe</div><div class="metric-value" id="metric-count">—</div><div class="metric-note">Names currently tracked</div></article>
+          <article class="metric"><div class="metric-label">With a logged setup</div><div class="metric-value" id="metric-signals">—</div><div class="metric-note">Logged during this session</div></article>
+          <article class="metric"><div class="metric-label">Confluence setups</div><div class="metric-value" id="metric-confluence">—</div><div class="metric-note">Cleared the signal gate</div></article>
+          <article class="metric"><div class="metric-label">Highest relative volume</div><div class="metric-value" id="metric-relvol">—</div><div class="metric-note" id="metric-relvol-symbol">Among tracked names</div></article>
+        </section>
+
+        <section class="workspace">
+          <div class="panel">
+            <div class="panel-head">
+              <div><h2 class="panel-title">Tracked stocks</h2><div class="panel-meta" id="table-subtitle">Waiting for the first successful scan</div></div>
+              <div class="panel-meta mono" id="row-count">0 names</div>
+            </div>
+            <div class="toolbar">
+              <label class="search-wrap"><span aria-hidden="true">⌕</span><input class="search" id="search" type="search" placeholder="Search symbol or sector" autocomplete="off" aria-label="Search symbol or sector" /></label>
+              <div class="filter-group" role="group" aria-label="Filter scanner rows">
+                <button class="filter-btn active" type="button" data-filter="all" aria-pressed="true">All</button>
+                <button class="filter-btn" type="button" data-filter="signals" aria-pressed="false">With setup</button>
+                <button class="filter-btn" type="button" data-filter="confluence" aria-pressed="false">Confluence</button>
+              </div>
+              <select class="select" id="sort" aria-label="Sort stocks">
+                <option value="relVolume">Sort: Rel. volume</option>
+                <option value="change">Sort: Day change</option>
+                <option value="symbol">Sort: Symbol</option>
+              </select>
+            </div>
+            <div class="table-wrap" id="table-wrap">
+              <table>
+                <thead><tr><th scope="col">Symbol</th><th scope="col">Price</th><th scope="col">Day %</th><th scope="col">Rel. vol</th><th scope="col">Latest logged setup</th><th scope="col">Entry / stop / target</th></tr></thead>
+                <tbody id="stock-rows"></tbody>
+              </table>
+              <div class="empty" id="empty-state"><div><b>Loading live scanner</b>Fetching the current NSE universe.</div></div>
+            </div>
+          </div>
+
+          <aside class="panel detail" aria-live="polite">
+            <div class="panel-head"><h2 class="panel-title">Setup details</h2><span class="panel-meta" id="detail-time">Select a symbol</span></div>
+            <div id="detail-content"><div class="detail-empty"><div><div class="icon">⌖</div><b>Select a stock</b>Choose a row to see its quote and latest setup details.</div></div></div>
+          </aside>
+        </section>
+
+        <div class="footnote"><span>Prices and signals are scanner observations, not broker orders.</span><span id="last-updated">Last successful scan: —</span></div>
+      </main>
+    </div>
+
+    <script>
+      (function () {
+        "use strict";
+        var $ = function (id) { return document.getElementById(id); };
+        var allStocks = [];
+        var marketState = null;
+        var lastUpdatedAt = null;
+        var activeFilter = "all";
+        var sortBy = "relVolume";
+        var selectedSymbol = null;
+        var loadFailed = false;
+        var chartRequestSymbol = null;
+        var chartRequestedAt = 0;
+        var chartRequestToken = 0;
+        var chartMarkupSymbol = null;
+        var chartMarkup = null;
+        var chartMarkupAt = 0;
+
+        function esc(value) {
+          return String(value == null ? "" : value).replace(/[&<>"']/g, function (ch) {
+            return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch];
+          });
+        }
+        function n(value, digits) {
+          var valueNumber = Number(value);
+          return value == null || !isFinite(valueNumber) ? "—" : valueNumber.toFixed(digits == null ? 2 : digits);
+        }
+        function phaseName(phase) {
+          return ({ weekend: "Weekend", holiday: "Holiday", pre_market: "Pre-market", opening_range: "Opening range", open: "Market open", lunch_lull: "Midday lull", square_off: "Square-off", post_market: "Market closed" })[phase] || phase || "Unknown";
+        }
+        function ageLabel(timestamp) {
+          if (!timestamp) return "not yet scanned";
+          var seconds = Math.max(0, Math.floor((Date.now() - new Date(timestamp).getTime()) / 1000));
+          if (!isFinite(seconds)) return "unknown";
+          if (seconds < 60) return seconds + "s ago";
+          if (seconds < 3600) return Math.floor(seconds / 60) + "m ago";
+          return Math.floor(seconds / 3600) + "h ago";
+        }
+        function localTime(timestamp) {
+          if (!timestamp) return "—";
+          var date = new Date(timestamp);
+          return isNaN(date.getTime()) ? "—" : date.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" }) + " IST";
+        }
+        function formatNumber(value, digits) {
+          var numValue = Number(value);
+          return value == null || !isFinite(numValue) ? "—" : numValue.toLocaleString("en-IN", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+        }
+        function changeClass(value) {
+          return Number(value) > 0 ? "positive" : Number(value) < 0 ? "negative" : "neutral";
+        }
+        function setupTags(signal) {
+          if (!signal || !Array.isArray(signal.signals) || !signal.signals.length) return '<span class="tag muted">No setup logged</span>';
+          return signal.signals.map(function (label) {
+            return '<span class="tag ' + (signal.confluence ? "strong" : "") + '">' + esc(label) + '</span>';
+          }).join("");
+        }
+        function stockMatches(stock, query) {
+          var text = (stock.symbol + " " + (stock.sector || "")).toLowerCase();
+          if (query && text.indexOf(query) === -1) return false;
+          if (activeFilter === "signals" && !stock.lastSignal) return false;
+          if (activeFilter === "confluence" && !(stock.lastSignal && stock.lastSignal.confluence)) return false;
+          return true;
+        }
+        function visibleStocks() {
+          var query = $("search").value.trim().toLowerCase();
+          return allStocks.filter(function (stock) { return stockMatches(stock, query); }).sort(function (a, b) {
+            if (sortBy === "symbol") return a.symbol.localeCompare(b.symbol);
+            var av = Number(a[sortBy]) || 0;
+            var bv = Number(b[sortBy]) || 0;
+            return bv - av;
+          });
+        }
+        function renderRows() {
+          var rows = visibleStocks();
+          if (selectedSymbol && !rows.some(function (stock) { return stock.symbol === selectedSymbol; })) {
+            selectedSymbol = null;
+            renderDetail(null);
+          }
+          $("row-count").textContent = rows.length + (rows.length === 1 ? " name" : " names");
+          $("empty-state").style.display = rows.length ? "none" : "grid";
+          if (!rows.length) {
+            $("stock-rows").innerHTML = "";
+            if (loadFailed) {
+              $("empty-state").innerHTML = '<div><b>Could not load scanner data</b>Check the API connection and refresh the page.</div>';
+            } else if (allStocks.length && $("search").value.trim()) {
+              $("empty-state").innerHTML = '<div><b>No matching stocks</b>Try another symbol or clear the search.</div>';
+            } else if (marketState && marketState.isOpen && marketState.scanner && (marketState.scanner.intradayReporting === false || marketState.scanner.reporting === false)) {
+              $("empty-state").innerHTML = '<div><b>Scanner is not reporting</b>The market is open, but the scanner has not checked in recently. Check the service before relying on this feed.</div>';
+            } else if (marketState && marketState.isOpen && (!lastUpdatedAt || Date.now() - new Date(lastUpdatedAt).getTime() > 90000)) {
+              $("empty-state").innerHTML = '<div><b>Waiting for fresh scanner data</b>The market is open, but no recent successful universe scan is available yet.</div>';
+            } else if (marketState && !marketState.isOpen) {
+              var next = marketState.nextOpen ? ' The next session is ' + esc(marketState.nextOpen.date) + ' at ' + esc(marketState.nextOpen.time) + ' IST.' : '';
+              $("empty-state").innerHTML = '<div><b>' + esc(phaseName(marketState.phase)) + '</b>The live universe is empty outside the active scan window.' + next + '<a href="/demo">Open the signal tape</a></div>';
+            } else {
+              $("empty-state").innerHTML = '<div><b>No stocks currently match</b>The scanner is reporting, but the current filters returned no names.</div>';
+            }
+            return;
+          }
+          $("stock-rows").innerHTML = rows.map(function (stock) {
+            var signal = stock.lastSignal;
+            var levels = signal && signal.levels;
+            var levelText = levels ? [levels.entry, levels.stop, levels.target].map(function (x) { return x == null ? "—" : n(x); }).join(" / ") : "— / — / —";
+            var change = Number(stock.change);
+            return '<tr data-symbol="' + esc(stock.symbol) + '" class="' + (stock.symbol === selectedSymbol ? "selected" : "") + '" tabindex="0" aria-label="Open details for ' + esc(stock.symbol) + '">' +
+              '<td><span class="symbol">' + esc(stock.symbol) + '</span><span class="subtext">' + esc(stock.sector || "NSE equity") + '</span></td>' +
+              '<td class="price">₹' + n(stock.price) + '</td>' +
+              '<td class="mono ' + changeClass(change) + '">' + (change > 0 ? "+" : "") + n(change) + '%</td>' +
+              '<td class="volume">' + n(stock.relVolume, 1) + '×</td>' +
+              '<td><div class="signal-stack">' + setupTags(signal) + (signal && signal.confluence ? '<span class="stamp">Confluence</span>' : '') + '</div></td>' +
+              '<td class="level-cell">' + levelText + '</td>' +
+              '</tr>';
+          }).join("");
+        }
+        function renderDetail(stock) {
+          if (!stock) {
+            chartRequestToken += 1;
+            chartRequestSymbol = null;
+            $("detail-time").textContent = "Select a symbol";
+            $("detail-content").innerHTML = '<div class="detail-empty"><div><div class="icon">⌖</div><b>Select a stock</b>Choose a row to see its quote and latest setup details.</div></div>';
+            return;
+          }
+          var signal = stock.lastSignal;
+          var levels = signal && signal.levels ? signal.levels : {};
+          var change = Number(stock.change);
+          $("detail-time").textContent = signal ? "Logged " + ageLabel(signal.ts) : "Live quote";
+          var signalBlock = signal
+            ? '<div class="divider"></div><div class="section-label">Latest logged setup</div><div class="detail-note"><strong>' + (signal.confluence ? 'Confluence gate cleared' : 'Signal recorded') + '</strong><br>' + esc((signal.signals || []).join(" · ")) + '<br><span class="mono">' + esc(localTime(signal.ts)) + (signal.signalCount ? ' · ' + esc(signal.signalCount) + ' signal(s)' : '') + '</span></div>'
+            : '<div class="divider"></div><div class="section-label">Latest logged setup</div><div class="detail-note">No signal has been logged for this symbol today. It may still be in the live scan universe.</div>';
+          var levelBlock = signal && levels.entry != null
+            ? '<div class="divider"></div><div class="section-label">Recorded levels</div><div class="levels"><div class="level entry"><span>Entry</span><b>₹' + n(levels.entry) + '</b></div><div class="level stop"><span>Stop</span><b>₹' + n(levels.stop) + '</b></div><div class="level target"><span>Target</span><b>₹' + n(levels.target) + '</b></div></div>' + (levels.riskReward != null ? '<div class="detail-note" style="margin-top:8px">Planned reward / risk <strong>' + n(levels.riskReward, 2) + 'R</strong></div>' : '')
+            : '';
+          $("detail-content").innerHTML = '<div class="detail-body"><div class="detail-symbol-row"><div><div class="detail-symbol">' + esc(stock.symbol) + '</div><div class="detail-sector">' + esc(stock.sector || "NSE equity") + '</div></div><span class="tag muted">NSE</span></div>' +
+            '<div class="detail-price">₹' + n(stock.price) + '</div><div class="detail-change ' + changeClass(change) + '">' + (change > 0 ? "+" : "") + n(change) + '% today <span class="neutral">·</span> ' + n(stock.relVolume, 1) + '× relative volume</div>' +
+            '<div class="divider"></div><div class="chart-heading"><div class="section-label" style="margin:0">5-minute candles</div><span class="panel-meta">recent bars</span></div><div class="chart" id="chart-container">' + (chartMarkupSymbol === stock.symbol && chartMarkup && Date.now() - chartMarkupAt < 60000 ? chartMarkup : '<div class="chart-loading">Loading price history…</div>') + '</div>' + signalBlock + levelBlock +
+            '<div class="detail-actions"><a class="text-link" href="/api/public/signals/recent?mode=intraday&symbol=' + encodeURIComponent(stock.symbol) + '">View signal history →</a></div></div>';
+          loadChart(stock.symbol);
+        }
+        function chartTime(timestamp) {
+          var date = new Date(Number(timestamp) * 1000);
+          return isNaN(date.getTime()) ? "" : date.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" });
+        }
+        function drawChart(symbol, candles) {
+          var width = 360;
+          var height = 230;
+          var left = 8;
+          var right = 48;
+          var top = 10;
+          var bottom = 28;
+          var plotWidth = width - left - right;
+          var plotHeight = height - top - bottom;
+          var values = candles.reduce(function (acc, candle) {
+            acc.push(Number(candle.high), Number(candle.low));
+            return acc;
+          }, []);
+          var minPrice = Math.min.apply(null, values);
+          var maxPrice = Math.max.apply(null, values);
+          if (!isFinite(minPrice) || !isFinite(maxPrice)) return null;
+          if (maxPrice === minPrice) { maxPrice += 1; minPrice -= 1; }
+          var pad = (maxPrice - minPrice) * .08;
+          minPrice -= pad;
+          maxPrice += pad;
+          var y = function (price) { return top + ((maxPrice - Number(price)) / (maxPrice - minPrice)) * plotHeight; };
+          var step = plotWidth / candles.length;
+          var bodyWidth = Math.max(2, Math.min(8, step * .52));
+          var grid = [];
+          for (var g = 0; g <= 3; g += 1) {
+            var gy = top + (plotHeight * g / 3);
+            var price = maxPrice - ((maxPrice - minPrice) * g / 3);
+            grid.push('<line x1="' + left + '" y1="' + gy.toFixed(1) + '" x2="' + (width - right + 2) + '" y2="' + gy.toFixed(1) + '" stroke="rgba(255,255,255,.08)" stroke-width="1" />');
+            grid.push('<text x="' + (width - right + 8) + '" y="' + (gy + 3).toFixed(1) + '" fill="#718096" font-size="9" font-family="IBM Plex Mono, monospace">' + esc(n(price)) + '</text>');
+          }
+          var bars = candles.map(function (candle, index) {
+            var x = left + (index + .5) * step;
+            var openY = y(candle.open);
+            var closeY = y(candle.close);
+            var highY = y(candle.high);
+            var lowY = y(candle.low);
+            var rising = Number(candle.close) >= Number(candle.open);
+            var color = rising ? '#6ee7ac' : '#ff7d89';
+            var rectY = Math.min(openY, closeY);
+            var rectHeight = Math.max(1.3, Math.abs(closeY - openY));
+            return '<g><line x1="' + x.toFixed(1) + '" y1="' + highY.toFixed(1) + '" x2="' + x.toFixed(1) + '" y2="' + lowY.toFixed(1) + '" stroke="' + color + '" stroke-width="1"/><rect x="' + (x - bodyWidth / 2).toFixed(1) + '" y="' + rectY.toFixed(1) + '" width="' + bodyWidth.toFixed(1) + '" height="' + rectHeight.toFixed(1) + '" rx=".5" fill="' + color + '"/></g>';
+          }).join('');
+          var timeLabels = [0, Math.floor((candles.length - 1) / 2), candles.length - 1].map(function (index, labelIndex) {
+            var x = left + (index + .5) * step;
+            var anchor = labelIndex === 0 ? 'start' : labelIndex === 2 ? 'end' : 'middle';
+            return '<text x="' + x.toFixed(1) + '" y="' + (height - 7) + '" text-anchor="' + anchor + '" fill="#718096" font-size="9" font-family="IBM Plex Mono, monospace">' + esc(chartTime(candles[index].time)) + '</text>';
+          }).join('');
+          return '<svg viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="5-minute candlestick chart for ' + esc(symbol) + '">' + grid.join('') + bars + timeLabels + '</svg>';
+        }
+        async function loadChart(symbol) {
+          var container = $("chart-container");
+          if (!container) return;
+          if (chartMarkupSymbol === symbol && chartMarkup && Date.now() - chartMarkupAt < 60000) {
+            container.innerHTML = chartMarkup;
+            return;
+          }
+          if (chartRequestSymbol === symbol && Date.now() - chartRequestedAt < 60000) return;
+          chartRequestSymbol = symbol;
+          chartRequestedAt = Date.now();
+          var token = ++chartRequestToken;
+          container.innerHTML = '<div class="chart-loading">Loading price history…</div>';
+          try {
+            var response = await fetch('/api/public/candles/' + encodeURIComponent(symbol) + '?interval=5m&limit=60', { headers: { Accept: 'application/json' } });
+            var payload = await response.json();
+            if (token !== chartRequestToken || selectedSymbol !== symbol) return;
+            if (!response.ok) throw new Error(payload.error || 'Chart data is unavailable');
+            var svg = drawChart(symbol, Array.isArray(payload.candles) ? payload.candles : []);
+            if (!svg) throw new Error('Chart data is unavailable');
+            chartMarkupSymbol = symbol;
+            chartMarkup = svg;
+            chartMarkupAt = Date.now();
+            var chartTarget = $("chart-container");
+            if (chartTarget) chartTarget.innerHTML = svg;
+          } catch (_) {
+            if (token === chartRequestToken && selectedSymbol === symbol) {
+              chartRequestSymbol = null;
+              var chartTarget = $("chart-container");
+              if (chartTarget) chartTarget.innerHTML = '<div class="chart-error">Price history is temporarily unavailable.</div>';
+            }
+          }
+        }
+        function selectStock(symbol) {
+          selectedSymbol = symbol;
+          var stock = allStocks.find(function (item) { return item.symbol === symbol; });
+          renderRows();
+          renderDetail(stock || null);
+        }
+        function updateMetrics() {
+          var withSignal = allStocks.filter(function (s) { return Boolean(s.lastSignal); });
+          var confluence = withSignal.filter(function (s) { return s.lastSignal.confluence; });
+          var leader = allStocks.slice().sort(function (a, b) { return (Number(b.relVolume) || 0) - (Number(a.relVolume) || 0); })[0];
+          $("metric-count").textContent = allStocks.length;
+          $("metric-signals").textContent = withSignal.length;
+          $("metric-confluence").textContent = confluence.length;
+          $("metric-relvol").textContent = leader ? n(leader.relVolume, 1) + '×' : '—';
+          $("metric-relvol-symbol").textContent = leader ? leader.symbol : 'Among tracked names';
+          $("table-subtitle").textContent = lastUpdatedAt ? 'Last successful universe scan ' + ageLabel(lastUpdatedAt) : 'Waiting for the first successful scan';
+          $("last-updated").textContent = 'Last successful scan: ' + (lastUpdatedAt ? localTime(lastUpdatedAt) + ' (' + ageLabel(lastUpdatedAt) + ')' : '—');
+        }
+        function renderStatus() {
+          if (!marketState) return;
+          $("market-label").textContent = phaseName(marketState.phase);
+          $("market-dot").className = 'dot ' + (marketState.isOpen ? 'good' : '');
+          var reporting = marketState.scanner && (marketState.scanner.intradayReporting == null ? marketState.scanner.reporting : marketState.scanner.intradayReporting);
+          var scanAge = lastUpdatedAt ? Math.floor((Date.now() - new Date(lastUpdatedAt).getTime()) / 1000) : null;
+          var isStale = Boolean(marketState.isOpen && scanAge != null && scanAge > 90);
+          var scannerText = !marketState.isOpen ? 'Scanner idle' : isStale ? 'Scan data stale' : reporting === false ? 'Not reporting' : !lastUpdatedAt ? 'Waiting for first scan' : reporting === true ? 'Scanner online' : 'Scanner status unknown';
+          $("scanner-label").textContent = scannerText;
+          $("scanner-dot").className = 'dot ' + (isStale || (reporting === false && marketState.isOpen) ? 'bad' : reporting ? 'good' : 'warn');
+          if (isStale) {
+            $("notice").textContent = 'The market is open, but the last successful scan is ' + ageLabel(lastUpdatedAt) + '. Treat the displayed universe as stale until scans resume.';
+            $("notice").classList.add('visible');
+          } else {
+            $("notice").classList.remove('visible');
+          }
+        }
+        async function refreshData() {
+          var button = $("refresh");
+          button.disabled = true;
+          try {
+            var responses = await Promise.all([
+              fetch('/api/public/live/stocks', { headers: { Accept: 'application/json' } }),
+              fetch('/api/public/market/status', { headers: { Accept: 'application/json' } }),
+            ]);
+            if (!responses[0].ok || !responses[1].ok) throw new Error('API request failed');
+            var payloads = await Promise.all(responses.map(function (response) { return response.json(); }));
+            allStocks = Array.isArray(payloads[0].stocks) ? payloads[0].stocks : [];
+            lastUpdatedAt = payloads[0].lastUpdated || null;
+            marketState = payloads[1];
+            loadFailed = false;
+            updateMetrics();
+            renderRows();
+            renderDetail(allStocks.find(function (s) { return s.symbol === selectedSymbol; }) || null);
+            renderStatus();
+          } catch (error) {
+            loadFailed = true;
+            renderRows();
+            $("notice").textContent = 'Scanner data could not be refreshed. Check the API connection and try again.';
+            $("notice").classList.add('visible');
+          } finally {
+            button.disabled = false;
+          }
+        }
+        function connectStream() {
+          if (!window.EventSource) {
+            $("stream-label").textContent = 'Live feed unavailable';
+            $("stream-dot").className = 'dot warn';
+            return;
+          }
+          var stream = new EventSource('/api/public/stream?mode=intraday');
+          stream.addEventListener('connected', function () {
+            $("stream-label").textContent = 'Live feed connected';
+            $("stream-dot").className = 'dot good';
+          });
+          stream.addEventListener('signal', function (event) {
+            try {
+              var signal = JSON.parse(event.data);
+              if (!signal.replay) refreshData();
+            } catch (_) { /* ignore malformed stream events */ }
+          });
+          stream.onerror = function () {
+            $("stream-label").textContent = 'Reconnecting feed';
+            $("stream-dot").className = 'dot warn';
+          };
+        }
+
+        $("search").addEventListener('input', renderRows);
+        $("sort").addEventListener('change', function () { sortBy = this.value; renderRows(); });
+        document.querySelectorAll('[data-filter]').forEach(function (button) {
+          button.addEventListener('click', function () {
+            activeFilter = button.dataset.filter;
+            document.querySelectorAll('[data-filter]').forEach(function (item) {
+              var selected = item === button;
+              item.classList.toggle('active', selected);
+              item.setAttribute('aria-pressed', selected ? 'true' : 'false');
+            });
+            renderRows();
+          });
+        });
+        $("stock-rows").addEventListener('click', function (event) {
+          var row = event.target.closest('tr[data-symbol]');
+          if (row) selectStock(row.dataset.symbol);
+        });
+        $("stock-rows").addEventListener('keydown', function (event) {
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          var row = event.target.closest('tr[data-symbol]');
+          if (row) { event.preventDefault(); selectStock(row.dataset.symbol); }
+        });
+        $("refresh").addEventListener('click', refreshData);
+
+        refreshData();
+        connectStream();
+        window.setInterval(refreshData, 30000);
+        window.setInterval(function () { updateMetrics(); renderStatus(); }, 10000);
+      })();
+    </script>
+  </body>
+</html>

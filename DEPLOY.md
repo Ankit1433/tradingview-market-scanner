@@ -66,6 +66,38 @@ SWING_DATA_DIR=/app/data          # mount a volume here
 docker compose --profile api up -d
 ```
 
+### Deploy the cloud side to Render
+
+This repository includes a root-level `render.yaml` Blueprint for the cloud
+API and UI. It deploys one always-on Node web service in Singapore, sets
+`INGEST_MODE=true`, generates the API key, and mounts persistent storage at
+`/app/data`. The same service serves `/app`, `/journal`, `/demo`, and the API.
+
+1. Push this repository to GitHub, GitLab, or Bitbucket.
+2. In Render, create a **Blueprint** and select this repository. Review the
+   service plan and disk, then apply the Blueprint.
+3. Once it is live, copy the generated `API_KEY` from the service's Environment
+   page. Set the following on the machine that runs the scanner:
+
+   ```bash
+   PUSH_URL=https://<your-render-service>.onrender.com
+   PUSH_API_KEY=<the-render-service-API_KEY>
+   ```
+
+4. Restart the local scanner. Open `/app` or `/journal` on the Render URL; check
+   `/api/ingest/status` to confirm the scanner is reporting.
+
+The Blueprint uses Render's smallest paid web plan (`0.5c-512mb`, currently
+$7/month) and a 1 GB disk (currently $0.25/month), before any usage-based
+charges. Render Free services sleep when idle and cannot use persistent disks,
+so Free is useful for a temporary UI preview but not this durable, live API.
+The health check uses `/` to check that the web process is responding;
+`/api/public/health` separately reports whether the upstream scanner is stale.
+
+The disk-backed service is intentionally a single instance. For horizontal
+scaling, move the journal and mirrored swing state from local JSONL/files to a
+shared database before adding instances.
+
 ### Home side
 
 ```bash
@@ -140,12 +172,12 @@ rather than a cosmetic one.
 
 ## Free-tier sleep
 
-Render and similar free tiers idle a service after ~15 minutes without
-traffic. Two consequences:
+Render Free idles a service after 15 minutes without traffic and its first
+request after sleeping can take about a minute to wake it. Two consequences:
 
 - **The scan loop stops.** Anything time-based (the 15:15 square-off, the
   15:45 swing scan) silently doesn't happen.
-- **The first visitor waits** ~30s for a cold start.
+- **The first visitor waits** about a minute for a cold start.
 
 Don't run the scanner half on a sleeping tier. The ingest-mode API is fine —
 an incoming push wakes it. If you want the demo page snappy, an uptime pinger

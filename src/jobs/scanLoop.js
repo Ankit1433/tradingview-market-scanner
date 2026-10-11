@@ -135,6 +135,7 @@ async function runCycle() {
     return 10000;
   }
   state.current = current;
+  state.lastScanAt = new Date().toISOString();
 
   ({ time: nowTime } = nowIST()); // refresh timestamp after the network round-trip
   const inAlertWindow = min(nowTime) >= min(C.TRADING_WINDOW_START) && min(nowTime) <= min(C.TRADING_WINDOW_END);
@@ -445,7 +446,17 @@ async function runCycle() {
             signals: candidates.map((c) => c.label),
             price: info.price,
             confluence: candidates.length >= C.CONFLUENCE_MIN_SIGNALS,
-            levels: entryStop ? { entry: entryStop[0], stop: entryStop[1] } : null,
+            levels: entryStop
+              ? {
+                  entry: entryStop[0],
+                  stop: entryStop[1],
+                  target: entryStop[0] + C.TARGET_POINTS_LOW,
+                  riskReward:
+                    entryStop[0] > entryStop[1]
+                      ? Number((C.TARGET_POINTS_LOW / (entryStop[0] - entryStop[1])).toFixed(2))
+                      : null,
+                }
+              : null,
             context: {
               sector: info.sector,
               change: info.change,

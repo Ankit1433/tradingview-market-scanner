@@ -1,13 +1,13 @@
 require('dotenv').config();
 
 const { createServer } = require('./server');
-const scanLoop = require('./jobs/scanLoop');
-const swingLoop = require('./jobs/swingLoop');
+const { start, stop } = require('./jobs/scanLoop');
+const { start: _start, stop: _stop } = require('./jobs/swingLoop');
 const { closeClient } = require('./services/tvHistory');
-const journal = require('./state/signalJournal');
-const eventStream = require('./services/eventStream');
+const { load } = require('./state/signalJournal');
+const { closeAll } = require('./services/eventStream');
 const { PUBLIC_MODE, API_KEY_CONFIGURED } = require('./middleware/auth');
-const pushClient = require('./services/pushClient');
+const { start: __start, drain } = require('./services/pushClient');
 
 const PORT = process.env.PORT || 4000;
 
@@ -24,25 +24,31 @@ const ENABLE_SWING = !INGEST_MODE && process.env.ENABLE_SWING !== 'false';
 
 // Load the persisted signal journal before serving anything - the public
 // endpoints read from it, and an unloaded journal would report zero history.
-journal.load();
+load();
 
 const app = createServer();
 const server = app.listen(PORT, () => {
   console.log(`API listening on http://localhost:${PORT}`);
   console.log(`Docs at http://localhost:${PORT}/api/docs`);
   if (PUBLIC_MODE) {
-    console.log('PUBLIC_MODE on — rupee figures redacted to R-multiples on public reads');
+    console.log(
+      'PUBLIC_MODE on — rupee figures redacted to R-multiples on public reads',
+    );
   }
   if (!API_KEY_CONFIGURED) {
-    console.warn('WARNING: API_KEY not set — admin and ingest endpoints are DISABLED (they fail closed, not open)');
+    console.warn(
+      'WARNING: API_KEY not set — admin and ingest endpoints are DISABLED (they fail closed, not open)',
+    );
   }
   if (INGEST_MODE) {
-    console.log('INGEST_MODE — no local scanning; serving reads and accepting pushed signals');
+    console.log(
+      'INGEST_MODE — no local scanning; serving reads and accepting pushed signals',
+    );
   }
 });
 
 if (ENABLE_INTRADAY) {
-  scanLoop.start().catch((e) => {
+  start().catch((e) => {
     console.error('Failed to start intraday scan loop:', e);
   });
 } else {
@@ -51,7 +57,7 @@ if (ENABLE_INTRADAY) {
 
 if (ENABLE_SWING) {
   try {
-    swingLoop.start();
+    _start();
   } catch (e) {
     console.error('Failed to start swing loop:', e);
   }
@@ -60,16 +66,16 @@ if (ENABLE_SWING) {
 }
 
 if (!INGEST_MODE) {
-  pushClient.start();
+  __start();
 }
 
 async function shutdown() {
   console.log('\nShutting down...');
-  scanLoop.stop();
-  swingLoop.stop();
+  stop();
+  _stop();
   // Best-effort flush of anything still queued for the remote API.
-  await pushClient.drain().catch(() => {});
-  eventStream.closeAll();
+  await drain().catch(() => {});
+  closeAll();
   closeClient();
   server.close(() => process.exit(0));
   // force-exit if something hangs

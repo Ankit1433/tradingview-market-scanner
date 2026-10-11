@@ -1,0 +1,26 @@
+# Deploy the read API and UI to Render. Keep the TradingView scan loops on a
+# machine with a working market-data connection; this service receives pushes.
+services:
+  - type: web
+    name: tradingview-market-scanner
+    runtime: node
+    plan: 0.5c-512mb
+    region: singapore
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: INGEST_MODE
+        value: "true"
+      - key: PUBLIC_MODE
+        value: "true"
+      - key: SWING_DATA_DIR
+        value: /app/data
+      - key: API_KEY
+        generateValue: true
+    disk:
+      name: scanner-data
+      mountPath: /app/data
+      sizeGB: 1

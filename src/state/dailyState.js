@@ -43,6 +43,7 @@ const state = {
   squareOffCount: 0,
 
   current: {},        // stock -> latest scan info (price/change/relVolume/sector)
+  lastScanAt: null,   // ISO timestamp of the last successful intraday universe fetch
   previous: new Set(), // previous cycle's tracked symbol set
 
   lastResetDate: null, // IST dateKey string, e.g. "2026-08-22"
@@ -86,6 +87,7 @@ function resetDailyState() {
   state.squareOffCount = 0;
 
   state.nifty = { value: null, ts: 0 };
+  state.lastScanAt = null;
 
   require('../trading/momentum').resetMomentum();
 

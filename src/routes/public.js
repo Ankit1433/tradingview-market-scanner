@@ -21,8 +21,19 @@ const { PUBLIC_MODE, API_KEY_CONFIGURED } = require('../middleware/auth');
 const { ingestState } = require('./ingest');
 const S = require('../config/swingConstants');
 const pkg = require('../../package.json');
+const { getHist, INTERVAL } = require('../services/tvHistory');
 
 const BOOT_TIME = Date.now();
+const candleCache = new Map();
+const candleRequests = new Map();
+const MAX_CANDLE_REQUESTS = 4;
+const MAX_CANDLE_CACHE = 250;
+
+function trimCandleCache() {
+  while (candleCache.size > MAX_CANDLE_CACHE) {
+    candleCache.delete(candleCache.keys().next().value);
+  }
+}
 
 /**
  * Recent signals, newest first. This is the primary feed a portfolio site
@@ -119,6 +130,8 @@ router.get('/market/status', (req, res) => {
     status.scanner = {
       mode: 'local',
       reporting: scanLoop.isRunning() || swingLoop.isRunning(),
+      intradayReporting: scanLoop.isRunning(),
+      swingReporting: swingLoop.isRunning(),
       lastContact: null,
     };
   }
@@ -205,19 +218,88 @@ router.get('/stream', (req, res) => {
   }
 });
 
+/** Short-lived, bounded candle reads used by the scanner workspace chart. */
+router.get('/candles/:symbol', async (req, res) => {
+  const symbol = String(req.params.symbol || '').toUpperCase();
+  if (!/^[A-Z0-9.&_-]{1,24}$/.test(symbol)) {
+    return res.status(400).json({ error: 'symbol contains unsupported characters.' });
+  }
+
+  const requestedInterval = req.query.interval || '5m';
+  const interval = requestedInterval === '1d' ? '1d' : requestedInterval === '5m' ? '5m' : null;
+  if (!interval) return res.status(400).json({ error: "interval must be '5m' or '1d'." });
+
+  const maxBars = interval === '1d' ? 250 : 100;
+  const requestedBars = req.query.limit === undefined ? (interval === '1d' ? 120 : 60) : Number(req.query.limit);
+  if (!Number.isInteger(requestedBars) || requestedBars < 20 || requestedBars > maxBars) {
+    return res.status(400).json({ error: `limit must be an integer from 20 to ${maxBars}.` });
+  }
+
+  const cacheKey = `${symbol}:${interval}:${requestedBars}`;
+  const cacheTtl = interval === '1d' ? 5 * 60 * 1000 : 15 * 1000;
+  const cached = candleCache.get(cacheKey);
+  if (cached && Date.now() - cached.storedAt < cacheTtl) {
+    return res.json({ symbol, interval, count: cached.candles.length, candles: cached.candles, cached: true });
+  }
+
+  let pending = candleRequests.get(cacheKey);
+  if (!pending) {
+    if (candleRequests.size >= MAX_CANDLE_REQUESTS) {
+      return res.status(503).json({ error: 'Candle service is busy. Try again shortly.' });
+    }
+    pending = getHist(
+      symbol,
+      'NSE',
+      interval === '1d' ? INTERVAL.IN_DAILY : INTERVAL.IN_5_MINUTE,
+      requestedBars,
+    ).then((candles) => {
+      if (!Array.isArray(candles) || candles.length === 0) return null;
+      const clean = candles.filter((candle) =>
+        ['time', 'open', 'high', 'low', 'close'].every((key) =>
+          candle[key] !== null && candle[key] !== undefined && Number.isFinite(Number(candle[key])),
+        ),
+      );
+      if (!clean.length) return null;
+      candleCache.set(cacheKey, { storedAt: Date.now(), candles: clean });
+      trimCandleCache();
+      return clean;
+    }).finally(() => candleRequests.delete(cacheKey));
+    candleRequests.set(cacheKey, pending);
+  }
+
+  const candles = await pending;
+  if (!candles) return res.status(502).json({ error: `No ${interval} candles are available for ${symbol}.` });
+  return res.json({ symbol, interval, count: candles.length, candles, cached: false });
+});
+
 /** Current live universe, trimmed. Empty outside market hours by nature. */
 router.get('/live/stocks', (req, res) => {
-  const stocks = Object.entries(intradayState.current).map(([symbol, info]) => ({
+  const market = getMarketStatus();
+  const currentSession = market.isOpen
+    && intradayState.lastScanAt
+    && intradayState.lastScanAt.startsWith(market.nowIST.slice(0, 10));
+  const signalsBySymbol = new Map();
+  for (const signal of journal.query({ limit: 500, mode: 'intraday' })) {
+    // The workspace shows today's setup alongside the live quote. Older
+    // journal entries remain available in /signals/recent, but shouldn't be
+    // mistaken for a current-session signal.
+    if (!signal.ts.startsWith(market.nowIST.slice(0, 10))) continue;
+    if (!signalsBySymbol.has(signal.symbol)) signalsBySymbol.set(signal.symbol, signal);
+  }
+
+  const stocks = Object.entries(currentSession ? intradayState.current : {}).map(([symbol, info]) => ({
     symbol,
     price: info.price,
     change: info.change,
     relVolume: info.relVolume,
     sector: info.sector,
+    lastSignal: signalsBySymbol.get(symbol) || null,
   }));
 
   res.json({
     count: stocks.length,
-    marketOpen: getMarketStatus().isOpen,
+    marketOpen: market.isOpen,
+    lastUpdated: intradayState.lastScanAt,
     stocks: stocks.sort((a, b) => (b.relVolume || 0) - (a.relVolume || 0)),
   });
 });

@@ -46,7 +46,12 @@ const spec = {
           levels: {
             type: 'object',
             nullable: true,
-            properties: { entry: { type: 'number' }, stop: { type: 'number' } },
+            properties: {
+              entry: { type: 'number' },
+              stop: { type: 'number' },
+              target: { type: 'number' },
+              riskReward: { type: 'number', nullable: true },
+            },
           },
           context: { type: 'object', nullable: true },
         },
@@ -142,11 +147,28 @@ const spec = {
         responses: { 200: { description: 'SSE stream', content: { 'text/event-stream': {} } }, 503: { description: 'Too many connections' } },
       },
     },
+    '/api/public/candles/{symbol}': {
+      get: {
+        tags: ['Public'],
+        summary: 'Bounded candle history for a symbol chart',
+        parameters: [
+          { name: 'symbol', in: 'path', required: true, schema: { type: 'string', maxLength: 24 }, example: 'RELIANCE' },
+          { name: 'interval', in: 'query', schema: { type: 'string', enum: ['5m', '1d'], default: '5m' } },
+          { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 20, maximum: 250 } },
+        ],
+        responses: {
+          200: { description: 'OHLC candles, oldest first' },
+          400: { description: 'Unsupported symbol, interval, or limit' },
+          502: { description: 'Candle provider returned no data' },
+          503: { description: 'Candle service is busy' },
+        },
+      },
+    },
     '/api/public/live/stocks': {
       get: {
         tags: ['Public'],
         summary: 'Current tracked universe',
-        description: 'Empty outside market hours by nature — check marketOpen in the response.',
+        description: 'Returns the live universe, the last successful scan timestamp, and any signal logged for each symbol today. The universe is empty outside market hours by nature — check marketOpen in the response.',
         responses: { 200: { description: 'Tracked stocks' } },
       },
     },

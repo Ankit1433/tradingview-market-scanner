@@ -165,7 +165,9 @@ src/
   server.js
   index.js                Starts HTTP server + both loops
 public/
-  demo.html               Self-contained live demo page, no build step
+  scanner.html            Daily-use intraday scanner workspace at /app
+  journal.html            Searchable signal history and CSV export at /journal
+  demo.html               Public signal tape at /demo; no build step
 Dockerfile                Non-root, tini init, health check
 docker-compose.yml        api / full profiles
 test-swing.js             65 assertions — swing indicators + position lifecycle
@@ -222,7 +224,7 @@ Design notes worth calling out:
 
 ## API
 
-Interactive docs at **`/api/docs`** (OpenAPI 3.0). Live demo page at **`/demo`**.
+Interactive docs at **`/api/docs`** (OpenAPI 3.0). The public signal demo is at **`/demo`**; the scanner workspace is at **`/app`**, and searchable signal history is at **`/journal`**.
 
 ### Public — no auth, always populated
 

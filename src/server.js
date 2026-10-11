@@ -43,6 +43,8 @@ function createServer() {
         intraday: '/api/scanner',
         swing: '/api/swing',
         stream: '/api/public/stream',
+        app: '/app',
+        journal: '/journal',
         demo: '/demo',
         ingest: '/api/ingest',
         health: '/api/public/health',
@@ -53,6 +55,15 @@ function createServer() {
   // Live demo page - a single self-contained HTML file, no build step.
   app.get('/demo', (req, res) => {
     res.sendFile(path.join(__dirname, '..', 'public', 'demo.html'));
+  });
+
+  // Daily-use scanner workspace, separate from the public portfolio demo.
+  app.get('/app', (req, res) => {
+    res.sendFile(path.join(__dirname, '..', 'public', 'scanner.html'));
+  });
+
+  app.get('/journal', (req, res) => {
+    res.sendFile(path.join(__dirname, '..', 'public', 'journal.html'));
   });
 
   app.get('/api/docs.json', (req, res) => res.json(spec));
