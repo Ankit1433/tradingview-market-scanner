@@ -54,12 +54,6 @@ function sectorCounterFrom(current) {
   return counter;
 }
 
-function topSectors(counter, n = 5) {
-  return Object.entries(counter)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, n);
-}
-
 function buildCloseSummary(dateLabel) {
   const pnl = state.totalRealizedPnl;
   return (
@@ -152,11 +146,11 @@ async function runCycle() {
     const pos = state.openPositions[stock];
     if (pos && !pos.closed) {
       await safeSend(
-        `⚠️ POSITION STOCK DROPPED FROM SCAN — ${stock}\nManage manually — stop was ₹${pos.stop.toFixed(2)}, last seen ${priceStr}`,
+        `⚠️ TRACKING ENDED · ${stock}\nOpen paper position · stop ₹${pos.stop.toFixed(2)} · last ${priceStr}`,
       );
       pos.closed = true;
     }
-    await safeSend(`❌ REMOVED: ${stock}\n💰 Last seen: ${priceStr}`);
+    await safeSend(`➖ REMOVED · ${stock}\nLast seen ${priceStr}`);
     state.removedAlertCount += 1;
   }
 
@@ -459,17 +453,13 @@ async function runCycle() {
 
   // ---------- Periodic market summary ----------
   if (Date.now() - state.lastSummaryTime >= C.SUMMARY_INTERVAL_MS && Object.keys(sectorCounter).length > 0) {
-    const lines = topSectors(sectorCounter)
-      .map(([sec, cnt]) => `  ${sec}: ${cnt}`)
-      .join('\n');
     const openCount = Object.values(state.openPositions).filter((p) => !p.closed).length;
     const pnl = state.totalRealizedPnl;
     const summaryMsg =
-      `📊 MARKET SUMMARY (${String(nowTime.h).padStart(2, '0')}:${String(nowTime.m).padStart(2, '0')})\n` +
-      `👀 Tracking: ${currentSymbols.size} stocks\n` +
-      `🚀 New: ${state.newAlertCount}  |  ❌ Removed: ${state.removedAlertCount}  |  💎 Strong setups: ${state.confluenceAlertCount}\n` +
-      `💰 Realized P&L: ₹${pnl >= 0 ? '+' : ''}${pnl.toFixed(0)}  |  📌 Open positions: ${openCount}\n` +
-      `🏷 Top sectors:\n${lines}`;
+      `📡 MARKET PULSE · UPDATE\n` +
+      `${String(nowTime.h).padStart(2, '0')}:${String(nowTime.m).padStart(2, '0')} IST · ${currentSymbols.size} tracked\n` +
+      `${state.newAlertCount} new · ${state.removedAlertCount} removed · ${state.confluenceAlertCount} strong\n` +
+      `📒 ${openCount} paper open · P&L ₹${pnl >= 0 ? '+' : ''}${pnl.toFixed(0)}`;
     await safeSend(summaryMsg);
     state.lastSummaryTime = Date.now();
   }

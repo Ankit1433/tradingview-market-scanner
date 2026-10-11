@@ -258,6 +258,11 @@ Telegram: `/stocks`, `/positions`, `/strong`, `/pullback`, `/momentum`,
 Signal alerts use a compact “Market Pulse” format with a one-tap TradingView
 button. Position and exit alerts are labeled as paper tracking; the scanner
 does not place broker orders. Use `/positions` or `/swing` to review levels.
+For a Telegram channel, add the bot as an admin with permission to post and set
+`TELEGRAM_CHAT_ID` to the channel username or numeric chat ID. Commands can be
+sent in the channel, but their replies will also be public there; use a private
+chat with the bot for private command replies. BotFather `/setcommands` is
+optional and only adds the command picker menu.
 
 ### Why the journal exists
 

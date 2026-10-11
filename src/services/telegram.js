@@ -21,7 +21,8 @@ function tradingViewKeyboard(symbol) {
 }
 
 async function sendMessage(message, options = {}) {
-  if (!BOT_TOKEN || !CHAT_ID) {
+  const chatId = options.chatId || CHAT_ID;
+  if (!BOT_TOKEN || !chatId) {
     console.warn(
       "[telegram] TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID not set - skipping send:",
       message.split("\n")[0],
@@ -30,7 +31,7 @@ async function sendMessage(message, options = {}) {
   }
   const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
   const payload = {
-    chat_id: CHAT_ID,
+    chat_id: chatId,
     text: message,
     disable_web_page_preview: true,
   };
@@ -371,7 +372,9 @@ async function processTelegramCommands() {
     } catch (e) {
       reply = `Error handling ${command}: ${e.message}`;
     }
-    await safeSend(reply);
+    // Replies follow the command source (private DM stays private); ordinary
+    // alerts continue to use the configured TELEGRAM_CHAT_ID destination.
+    if (msg.chat?.id !== undefined) await safeSend(reply, { chatId: msg.chat.id });
   }
 }
 
