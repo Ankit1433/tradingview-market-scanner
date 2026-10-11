@@ -62,6 +62,23 @@ function createServer() {
     res.sendFile(path.join(__dirname, '..', 'public', 'scanner.html'));
   });
 
+  app.get('/manifest.webmanifest', (req, res) => {
+    res.type('application/manifest+json').sendFile(path.join(__dirname, '..', 'public', 'manifest.webmanifest'));
+  });
+
+  app.get('/service-worker.js', (req, res) => {
+    res.type('application/javascript');
+    res.set('Service-Worker-Allowed', '/');
+    res.sendFile(path.join(__dirname, '..', 'public', 'service-worker.js'));
+  });
+
+  app.get('/icons/:icon', (req, res, next) => {
+    if (!['market-scanner-192.png', 'market-scanner-512.png'].includes(req.params.icon)) {
+      return next();
+    }
+    return res.sendFile(path.join(__dirname, '..', 'public', 'icons', req.params.icon));
+  });
+
   app.get('/journal', (req, res) => {
     res.sendFile(path.join(__dirname, '..', 'public', 'journal.html'));
   });

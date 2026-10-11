@@ -255,6 +255,10 @@ Telegram: `/stocks`, `/positions`, `/strong`, `/pullback`, `/momentum`,
 `/volume`, `/vwap`, `/runner`, `/afternoon` for intraday; `/swing` and
 `/swingstats` for swing; `/help` for the full list.
 
+The scanner workspace at `/app` can be installed from a supported browser.
+Its app shell is cached for offline launch; live quotes, charts, and scanner
+updates still require an internet connection.
+
 Signal alerts use a compact “Market Pulse” format with a one-tap TradingView
 button. Position and exit alerts are labeled as paper tracking; the scanner
 does not place broker orders. Use `/positions` or `/swing` to review levels.
