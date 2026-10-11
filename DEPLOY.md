@@ -49,8 +49,9 @@ The hosted half has no market-data dependency at all, so the IP-blocking
 problem disappears. It still wants a volume for the journal, but losing it is
 now cosmetic rather than "forgot a position I'm holding."
 
-The same codebase runs both sides. `INGEST_MODE=true` only stops the local
-scan loops from starting.
+The same codebase runs both sides. `INGEST_MODE=true` stops the cloud scan
+loops. The home scanner pushes its latest intraday universe, signals, swing
+positions, and a heartbeat to the cloud API.
 
 ### Cloud side
 
@@ -72,6 +73,8 @@ This repository includes a root-level `render.yaml` Blueprint for the cloud
 API and UI. It deploys one always-on Node web service in Singapore, sets
 `INGEST_MODE=true`, generates the API key, and mounts persistent storage at
 `/app/data`. The same service serves `/app`, `/journal`, `/demo`, and the API.
+The local scanner sends a fresh stock-universe snapshot after each successful
+scan so `/app` can show live quotes without a database.
 
 1. Push this repository to GitHub, GitLab, or Bitbucket.
 2. In Render, create a **Blueprint** and select this repository. Review the
@@ -85,7 +88,8 @@ API and UI. It deploys one always-on Node web service in Singapore, sets
    ```
 
 4. Restart the local scanner. Open `/app` or `/journal` on the Render URL; check
-   `/api/ingest/status` to confirm the scanner is reporting.
+   `/api/ingest/status` to confirm `lastUniverseScanAt` and `universeCount` are
+   updating.
 
 The Blueprint uses Render's smallest paid web plan (`0.5c-512mb`, currently
 $7/month) and a 1 GB disk (currently $0.25/month), before any usage-based

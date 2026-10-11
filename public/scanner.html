@@ -546,6 +546,7 @@
               if (!signal.replay) refreshData();
             } catch (_) { /* ignore malformed stream events */ }
           });
+          stream.addEventListener('scan_status', function () { refreshData(); });
           stream.onerror = function () {
             $("stream-label").textContent = 'Reconnecting feed';
             $("stream-dot").className = 'dot warn';

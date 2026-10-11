@@ -34,6 +34,7 @@ const ingestState = {
   lastPushFrom: null,
   totalPushed: 0,
   lastHeartbeatAt: null,
+  latestUniverse: null,
 };
 
 const VALID_MODES = ['intraday', 'swing'];
@@ -188,6 +189,61 @@ router.post('/heartbeat', requireKey, (req, res) => {
   res.json({ ok: true, at: ingestState.lastHeartbeatAt });
 });
 
+router.post('/universe', requireKey, (req, res) => {
+  const { stocks, lastScanAt } = req.body || {};
+  if (!Array.isArray(stocks)) {
+    return res.status(400).json({ error: 'stocks must be an array' });
+  }
+  if (stocks.length > 200) {
+    return res.status(413).json({ error: 'Too many stocks in one snapshot.' });
+  }
+  if (typeof lastScanAt !== 'string' || !Number.isFinite(Date.parse(lastScanAt))) {
+    return res.status(400).json({ error: 'lastScanAt must be a valid timestamp' });
+  }
+
+  const next = {};
+  for (let i = 0; i < stocks.length; i++) {
+    const stock = stocks[i];
+    if (!stock || typeof stock !== 'object' || Array.isArray(stock)) {
+      return res.status(400).json({ error: `stocks[${i}] must be an object` });
+    }
+    if (typeof stock.symbol !== 'string' || !/^[A-Z0-9.&_-]{1,24}$/i.test(stock.symbol)) {
+      return res.status(400).json({ error: `stocks[${i}].symbol is invalid` });
+    }
+    if (typeof stock.price !== 'number' || !Number.isFinite(stock.price) || stock.price <= 0) {
+      return res.status(400).json({ error: `stocks[${i}].price must be a positive number` });
+    }
+    for (const key of ['change', 'relVolume']) {
+      if (stock[key] !== null && stock[key] !== undefined
+        && (typeof stock[key] !== 'number' || !Number.isFinite(stock[key]))) {
+        return res.status(400).json({ error: `stocks[${i}].${key} must be a number or null` });
+      }
+    }
+    if (stock.sector !== null && stock.sector !== undefined
+      && (typeof stock.sector !== 'string' || stock.sector.length > 120)) {
+      return res.status(400).json({ error: `stocks[${i}].sector must be a short string or null` });
+    }
+
+    next[stock.symbol.toUpperCase()] = {
+      price: stock.price,
+      change: stock.change ?? null,
+      relVolume: stock.relVolume ?? null,
+      sector: stock.sector || null,
+    };
+  }
+
+  ingestState.latestUniverse = { lastScanAt, stocks: next };
+  ingestState.lastPushAt = new Date().toISOString();
+  ingestState.lastPushFrom = req.ip;
+  eventStream.broadcast('scan_status', {
+    mode: 'intraday',
+    lastScanAt,
+    trackedCount: Object.keys(next).length,
+  });
+
+  res.json({ ok: true, count: Object.keys(next).length, lastScanAt });
+});
+
 router.get('/status', (req, res) => {
   const last = ingestState.lastHeartbeatAt || ingestState.lastPushAt;
   const ageMs = last ? Date.now() - new Date(last).getTime() : null;
@@ -195,6 +251,8 @@ router.get('/status', (req, res) => {
   res.json({
     lastPushAt: ingestState.lastPushAt,
     lastHeartbeatAt: ingestState.lastHeartbeatAt,
+    lastUniverseScanAt: ingestState.latestUniverse?.lastScanAt || null,
+    universeCount: Object.keys(ingestState.latestUniverse?.stocks || {}).length,
     totalPushed: ingestState.totalPushed,
     secondsSinceContact: ageMs === null ? null : Math.floor(ageMs / 1000),
     // 10 minutes of silence during a session means something is wrong.

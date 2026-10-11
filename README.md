@@ -133,7 +133,7 @@ src/
     nifty.js              Cached index change for the intraday RS gate
     eventStream.js        SSE broadcaster with heartbeat + reconnect support
     marketStatus.js       Session phase, holidays, next open
-    pushClient.js         Forwards signals to a remote instance (queued, bounded)
+    pushClient.js         Forwards universe snapshots, signals, and positions to a remote instance
   indicators/
     ta.js                 EMA / session-resetting VWAP
     swingTa.js            ATR (Wilder), SMA, RSI, rolling high/low
@@ -287,8 +287,8 @@ bucketing the entire internet under one address.
 Two shapes, covered in **[DEPLOY.md](DEPLOY.md)**:
 
 - **Single process** — scanner and API together. Fine locally.
-- **Split** — scanner at home, read-only API in the cloud, signals pushed over
-  an authenticated POST.
+- **Split** — scanner at home, read API in the cloud, live universe snapshots,
+  signals, and positions pushed over authenticated POSTs.
 
 The split exists for a concrete reason: the market data sources are
 undocumented internal TradingView endpoints, and requests to them from

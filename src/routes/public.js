@@ -275,9 +275,13 @@ router.get('/candles/:symbol', async (req, res) => {
 /** Current live universe, trimmed. Empty outside market hours by nature. */
 router.get('/live/stocks', (req, res) => {
   const market = getMarketStatus();
+  const ingestMode = process.env.INGEST_MODE === 'true';
+  const remoteUniverse = ingestMode ? ingestState.latestUniverse : null;
+  const lastScanAt = ingestMode ? remoteUniverse?.lastScanAt || null : intradayState.lastScanAt;
+  const current = ingestMode ? remoteUniverse?.stocks || {} : intradayState.current;
   const currentSession = market.isOpen
-    && intradayState.lastScanAt
-    && intradayState.lastScanAt.startsWith(market.nowIST.slice(0, 10));
+    && lastScanAt
+    && lastScanAt.startsWith(market.nowIST.slice(0, 10));
   const signalsBySymbol = new Map();
   for (const signal of journal.query({ limit: 500, mode: 'intraday' })) {
     // The workspace shows today's setup alongside the live quote. Older
@@ -287,7 +291,7 @@ router.get('/live/stocks', (req, res) => {
     if (!signalsBySymbol.has(signal.symbol)) signalsBySymbol.set(signal.symbol, signal);
   }
 
-  const stocks = Object.entries(currentSession ? intradayState.current : {}).map(([symbol, info]) => ({
+  const stocks = Object.entries(currentSession ? current : {}).map(([symbol, info]) => ({
     symbol,
     price: info.price,
     change: info.change,
@@ -299,7 +303,7 @@ router.get('/live/stocks', (req, res) => {
   res.json({
     count: stocks.length,
     marketOpen: market.isOpen,
-    lastUpdated: intradayState.lastScanAt,
+    lastUpdated: lastScanAt,
     stocks: stocks.sort((a, b) => (b.relVolume || 0) - (a.relVolume || 0)),
   });
 });

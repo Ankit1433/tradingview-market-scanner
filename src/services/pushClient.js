@@ -1,5 +1,5 @@
 /**
- * Pushes signals from a locally-running scanner to a remote API instance.
+ * Pushes the live universe and signals from a local scanner to a remote API.
  *
  * Enabled by setting PUSH_URL. When unset this is inert, so the same code
  * runs unchanged in single-process mode.
@@ -32,6 +32,8 @@ let flushTimer = null;
 let heartbeatTimer = null;
 let consecutiveFailures = 0;
 let enabled = false;
+let pendingUniverse = null;
+let universePushInFlight = false;
 
 const stats = { sent: 0, failed: 0, dropped: 0 };
 
@@ -109,6 +111,41 @@ async function flush() {
   }
 }
 
+/** Forward the latest live universe without delaying the scan cycle. */
+async function flushUniverse() {
+  if (!enabled || universePushInFlight || !pendingUniverse) return;
+
+  const snapshot = pendingUniverse;
+  pendingUniverse = null;
+  universePushInFlight = true;
+
+  try {
+    const res = await request('/api/ingest/universe', snapshot);
+    if (res.status === 401 || res.status === 503) {
+      console.error(`[push] universe auth rejected (${res.status}) — disabling push. Check PUSH_API_KEY matches the remote API_KEY.`);
+      enabled = false;
+      pendingUniverse = null;
+      stop();
+      return;
+    }
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  } catch (e) {
+    // The next successful scan will send a fresh snapshot.
+    console.warn(`[push] universe sync failed: ${e.message}`);
+  } finally {
+    universePushInFlight = false;
+    if (pendingUniverse) flushUniverse();
+  }
+}
+
+function pushUniverse(stocks, lastScanAt) {
+  if (!enabled) return;
+  // Coalesce scans if a slow request is still in flight; only the newest
+  // universe matters to the live workspace.
+  pendingUniverse = { stocks, lastScanAt };
+  flushUniverse();
+}
+
 /** Mirror current swing positions to the remote. Called after each swing scan. */
 async function pushPositions(positions, totalRealizedPnl, counters, closedTrades) {
   if (!enabled) return;
@@ -178,4 +215,4 @@ function getStats() {
   return { ...stats, queued: queue.length, enabled, consecutiveFailures };
 }
 
-module.exports = { start, stop, drain, pushSignal, pushPositions, isEnabled, getStats };
+module.exports = { start, stop, drain, pushSignal, pushPositions, pushUniverse, isEnabled, getStats };

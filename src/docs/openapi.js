@@ -26,6 +26,7 @@ const spec = {
     { name: 'Public', description: 'Unauthenticated read endpoints — always populated' },
     { name: 'Intraday', description: 'Live intraday scanner state' },
     { name: 'Swing', description: 'Swing positions and trade journal' },
+    { name: 'Ingest', description: 'Authenticated pushes from a remote scanner' },
     { name: 'Admin', description: 'Requires x-api-key' },
   ],
   components: {
@@ -170,6 +171,48 @@ const spec = {
         summary: 'Current tracked universe',
         description: 'Returns the live universe, the last successful scan timestamp, and any signal logged for each symbol today. The universe is empty outside market hours by nature — check marketOpen in the response.',
         responses: { 200: { description: 'Tracked stocks' } },
+      },
+    },
+    '/api/ingest/universe': {
+      post: {
+        tags: ['Ingest'],
+        summary: 'Replace the current remote intraday universe snapshot',
+        security: [{ ApiKeyAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['lastScanAt', 'stocks'],
+                properties: {
+                  lastScanAt: { type: 'string', format: 'date-time' },
+                  stocks: {
+                    type: 'array',
+                    maxItems: 200,
+                    items: {
+                      type: 'object',
+                      required: ['symbol', 'price'],
+                      properties: {
+                        symbol: { type: 'string', maxLength: 24 },
+                        price: { type: 'number', minimum: 0, exclusiveMinimum: true },
+                        change: { type: 'number', nullable: true },
+                        relVolume: { type: 'number', nullable: true },
+                        sector: { type: 'string', nullable: true, maxLength: 120 },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'Snapshot accepted' },
+          400: { description: 'Invalid snapshot' },
+          401: { description: 'Invalid API key' },
+          413: { description: 'Snapshot too large' },
+        },
       },
     },
     '/api/scanner/stocks': {

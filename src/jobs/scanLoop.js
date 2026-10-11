@@ -136,6 +136,10 @@ async function runCycle() {
   }
   state.current = current;
   state.lastScanAt = new Date().toISOString();
+  pushClient.pushUniverse(
+    Object.entries(current).map(([symbol, info]) => ({ symbol, ...info })),
+    state.lastScanAt,
+  );
 
   ({ time: nowTime } = nowIST()); // refresh timestamp after the network round-trip
   const inAlertWindow = min(nowTime) >= min(C.TRADING_WINDOW_START) && min(nowTime) <= min(C.TRADING_WINDOW_END);
