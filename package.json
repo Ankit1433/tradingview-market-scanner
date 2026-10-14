@@ -15,10 +15,11 @@
   },
   "dependencies": {
     "@mathieuc/tradingview": "^3.5.2",
-    "axios": "^1.7.0",
+    "axios": "^1.6.0",
     "dotenv": "^16.6.1",
     "express": "^4.19.2",
-    "node-cron": "^3.0.3"
+    "node-cron": "^3.0.3",
+    "uuid": "^11.0.0"
   },
   "engines": {
     "node": ">=18"
