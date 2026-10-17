@@ -33,7 +33,7 @@ function createServer() {
 
   app.get('/', (req, res) => {
     res.json({
-      name: 'NSE Scanner API',
+      name: 'AnkQuant API',
       version: pkg.version,
       docs: '/api/docs',
       publicMode: PUBLIC_MODE,

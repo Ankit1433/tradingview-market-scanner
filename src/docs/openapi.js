@@ -12,7 +12,7 @@ const pkg = require('../../package.json');
 const spec = {
   openapi: '3.0.3',
   info: {
-    title: 'NSE Scanner API',
+    title: 'AnkQuant API',
     version: pkg.version,
     description:
       'Intraday and swing scanner for NSE equities. Public read endpoints are unauthenticated; ' +
@@ -289,7 +289,7 @@ const DOCS_HTML = `<!DOCTYPE html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>NSE Scanner API — Docs</title>
+  <title>AnkQuant API — Docs</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui.min.css" />
   <style>
     body { margin: 0; background: #fafafa; }

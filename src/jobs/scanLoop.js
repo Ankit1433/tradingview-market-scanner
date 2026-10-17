@@ -24,6 +24,7 @@ const {
   getOrb,
 } = require('../indicators/signals');
 const { openPosition, managePosition } = require('../trading/positionManager');
+const paperTradeStore = require('../services/paperTradeStore');
 const { getNiftyChange } = require('../services/nifty');
 const {
   safeSend,
@@ -149,6 +150,10 @@ async function runCycle() {
         `⚠️ TRACKING ENDED · ${stock}\nOpen paper position · stop ₹${pos.stop.toFixed(2)} · last ${priceStr}`,
       );
       pos.closed = true;
+      pos.exitPrice = Number.isFinite(lastPrice) ? lastPrice : null;
+      pos.exitReason = 'tracking_ended';
+      pos.closedAt = new Date().toISOString();
+      paperTradeStore.saveIntradayPosition(stock, pos, { sector: pos.sector || null });
     }
     await safeSend(`➖ REMOVED · ${stock}\nLast seen ${priceStr}`);
     state.removedAlertCount += 1;
@@ -370,7 +375,11 @@ async function runCycle() {
       for (const c of candidates) {
         if (c.entryStop) {
           const [entryP, stopP] = c.entryStop;
-          const sizing = openPosition(stock, entryP, stopP);
+          const sizing = openPosition(stock, entryP, stopP, {
+            dateKey,
+            signals: candidates.map((candidate) => candidate.label),
+            sector: info.sector || null,
+          });
           if (sizing) {
             newlyOpened = sizing;
             state.positionsOpenedCount += 1;

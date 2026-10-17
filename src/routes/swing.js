@@ -207,23 +207,34 @@ router.post("/positions/:symbol/close", requireKey, (req, res) => {
   }
 
   const qty = pos.partialBooked ? pos.runnerQty : pos.qty;
-  const pnl = qty * (exitPrice - pos.entry);
-  state.totalRealizedPnl += pnl;
+  const finalPnl = qty * (exitPrice - pos.entry);
+  state.totalRealizedPnl += finalPnl;
+  pos.realizedPnl = (pos.realizedPnl || 0) + finalPnl;
   pos.closed = true;
+  pos.exitPrice = exitPrice;
+  pos.exitReason = "manual";
+  pos.closedAt = new Date().toISOString();
   state.closedTrades.push({
+    tradeKey: pos.tradeKey,
     symbol,
     entry: pos.entry,
+    initialStop: pos.initialStop,
+    currentStop: pos.stop,
+    target: pos.target,
     exit: exitPrice,
     qty,
-    pnl,
+    initialQty: pos.qty,
+    pnl: pos.realizedPnl,
+    finalPnl,
     reason: "manual",
     openedOn: pos.openedOn,
+    closedAt: pos.closedAt,
     barsHeld: pos.barsHeld,
     signals: pos.signals,
   });
   swingState.save();
 
-  res.json({ closed: symbol, qty, exitPrice, pnl });
+  res.json({ closed: symbol, qty, exitPrice, pnl: finalPnl, totalTradePnl: pos.realizedPnl });
 });
 
 module.exports = router;

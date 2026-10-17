@@ -1,4 +1,4 @@
-# TradingView Market Scanner
+# AnkQuant
 
 A production-style Node.js + Express market intelligence platform for detecting intraday and swing trading setups using technical indicators, price action, and configurable market conditions.
 
@@ -6,7 +6,7 @@ A production-style Node.js + Express market intelligence platform for detecting 
 
 ### Live Scanner Dashboard
 
-![TradingView Market Scanner Dashboard](src/docs/dashboard.png)
+![AnkQuant dashboard](src/docs/dashboard.png)
 
 ### Signal Tape & Confluence Detection
 
@@ -130,6 +130,8 @@ src/
     swingScanner.js       Swing scan universe (different filters entirely)
     tvHistory.js          Historical OHLCV candles (websocket client)
     telegram.js           Alerts + /command polling for both modes
+    supabaseStore.js      Server-only persistent storage adapter
+    paperTradeStore.js    Persists trade lifecycle and restores today's positions
     nifty.js              Cached index change for the intraday RS gate
     eventStream.js        SSE broadcaster with heartbeat + reconnect support
     marketStatus.js       Session phase, holidays, next open
@@ -145,9 +147,9 @@ src/
     momentum.js              Cross-cycle momentum history
     volume.js                Volume explosion detection
   state/
-    dailyState.js         Intraday state — in-memory, reset daily
-    swingState.js         Swing state — persisted to disk, survives restarts
-    signalJournal.js      Append-only JSONL journal of every signal fired
+    dailyState.js         Intraday scan state — in-memory, reset daily
+    swingState.js         Swing state — Supabase with local-file fallback
+    signalJournal.js      Signal journal — Supabase with JSONL fallback
   jobs/
     scanLoop.js           Intraday cycle — tiered 15–30s polling
     swingLoop.js          Swing cycle — once daily after close
@@ -170,6 +172,7 @@ public/
   demo.html               Public signal tape at /demo; no build step
 Dockerfile                Non-root, tini init, health check
 docker-compose.yml        api / full profiles
+supabase/migrations/      SQL schema for durable signals and paper trades
 test-swing.js             65 assertions — swing indicators + position lifecycle
 test-api.js               79 assertions — auth, redaction, SSE, journal, errors
 test-ingest.js            49 assertions — split architecture over real HTTP
@@ -179,14 +182,12 @@ test-ingest.js            49 assertions — split architecture over real HTTP
 
 Design notes worth calling out:
 
-- **Swing state is persisted; intraday state is not.** This is the main
-  architectural split. Intraday positions are closed by 15:15, so losing
-  tracking on a restart is survivable. A swing position is held for weeks — if
-  the process restarts and the scanner forgets it, it silently stops managing
-  a stop on money that's still at risk. Swing state is written atomically
-  (temp file + rename) on every mutation and reloaded on boot. A corrupt state
-  file is backed up rather than overwritten, because destroying the only
-  record of open positions is worse than the crash it's avoiding.
+- **Supabase is the durable store when configured.** It preserves signal
+  history, swing positions, and swing trade outcomes across Render restarts.
+  Local development falls back to JSONL/JSON files. Intraday live state stays
+  in memory and resets daily; open intraday paper positions and trade history
+  are mirrored to Supabase. A swing position is held for weeks, so losing it on
+  restart could stop the scanner from managing its paper stop.
 - **The swing scan runs after the close, not intraday.** Daily signals
   evaluated against a still-forming candle are simply wrong — a "breakout on
   1.8× volume" checked at 11:00 compares a third of a day's volume against
@@ -209,9 +210,10 @@ Design notes worth calling out:
   it survives proxies that mangle WebSocket upgrades, and needs no client
   library. A 25s heartbeat keeps idle proxies from closing the connection —
   which matters on a scanner, because most of the day is idle.
-- **The journal is JSONL, appended.** Rewriting a JSON array on every signal
-  would be O(n) as it grows, and a crash mid-write would corrupt the whole
-  file. With line-delimited appends a torn write costs one record.
+- **The local journal fallback is JSONL, appended.** With Supabase configured,
+  signal events are durable database rows and the in-memory recent slice keeps
+  API reads fast. A new, empty Supabase project is seeded from the local
+  journal slice and swing state on first startup.
 - **Journal and stream writes are wrapped in try/catch inside the scan loops.**
   Alerting is the primary job; the API feed is secondary and must never be able
   to take a scan cycle down. The push client follows the same rule — an
@@ -219,6 +221,24 @@ Design notes worth calling out:
 - **A dead scanner and a quiet market produce identical empty feeds.** The
   scanner heartbeats to the API, and `/api/public/market/status` reports
   `scanner.reporting`, so the UI can say which one it's looking at.
+
+---
+
+## Supabase database
+
+The database stores signal events, the swing portfolio state, and normalized
+paper-trade rows. It does not store every live quote. The scanner continues to
+use its existing backend API, so Supabase secrets never go into browser code.
+
+1. Create a Supabase project.
+2. Run [`202610180001_persistent_scanner_data.sql`](supabase/migrations/202610180001_persistent_scanner_data.sql) in its SQL Editor.
+3. In the Render backend service, add `SUPABASE_URL` and `SUPABASE_SECRET_KEY` from the Supabase project settings. The older `SUPABASE_SERVICE_ROLE_KEY` variable is also supported.
+4. Redeploy and open `/api/public/health`. `checks.database` should report `supabase`.
+
+Keep the secret key in Render's environment settings and local `.env` only;
+never commit it or add it to `public/`. If the database is not configured or
+temporarily unreachable, AnkQuant starts with local-file storage and logs the
+database status.
 
 ---
 

@@ -26,7 +26,8 @@ const {
   TRAIL_PULLBACK_PCT,
   SQUARE_OFF_TIME,
 } = require('../config/constants');
-const { timeGte } = require('../config/timeUtils');
+const { timeGte, nowIST } = require('../config/timeUtils');
+const paperTradeStore = require('../services/paperTradeStore');
 
 function totalCapitalDeployed() {
   return Object.values(state.openPositions)
@@ -56,7 +57,7 @@ function positionSize(entryPrice, stopPrice, capitalOverride = null) {
 }
 
 /** Registers one tracked position per stock per day, capped by remaining daily capital. */
-function openPosition(stock, entry, stop) {
+function openPosition(stock, entry, stop, meta = {}) {
   const remainingCapital = TOTAL_CAPITAL * LEVERAGE_MULTIPLIER - totalCapitalDeployed();
   if (remainingCapital <= 0) return null;
 
@@ -64,16 +65,32 @@ function openPosition(stock, entry, stop) {
   if (!sizing) return null;
 
   state.openPositions[stock] = {
+    tradeKey: `intraday:${stock}:${meta.dateKey || nowIST().dateKey}`,
+    openedOn: meta.dateKey || nowIST().dateKey,
+    openedAt: new Date().toISOString(),
     entry,
     stop,
+    initialStop: stop,
     qty: sizing.qty,
     target: entry + TARGET_POINTS_LOW,
     partialBooked: false,
     runnerQty: 0,
     highest: entry,
+    realizedPnl: 0,
+    signals: Array.isArray(meta.signals) ? meta.signals : [],
+    sector: meta.sector || null,
     closed: false,
   };
+  paperTradeStore.saveIntradayPosition(stock, state.openPositions[stock], { sector: state.openPositions[stock].sector });
   return sizing;
+}
+
+function finishPosition(stock, pos, exitPrice, reason) {
+  pos.closed = true;
+  pos.exitPrice = exitPrice;
+  pos.exitReason = reason;
+  pos.closedAt = new Date().toISOString();
+  paperTradeStore.saveIntradayPosition(stock, pos, { sector: pos.sector || null });
 }
 
 /** One cycle of exit management for `stock`'s open position, if any. Mutates state and sends alerts. */
@@ -85,11 +102,12 @@ async function managePosition(stock, price, nowTime, safeSend) {
     const qtyLeft = pos.partialBooked ? pos.runnerQty : pos.qty;
     const pnl = qtyLeft * (price - pos.entry);
     state.totalRealizedPnl += pnl;
+    pos.realizedPnl = (pos.realizedPnl || 0) + pnl;
     state.squareOffCount += 1;
     await safeSend(
       `⏰ PAPER FLAT · ${stock}\n${qtyLeft} sh @ ₹${price.toFixed(2)} · P&L ₹${pnl >= 0 ? '+' : ''}${pnl.toFixed(0)}`,
     );
-    pos.closed = true;
+    finishPosition(stock, pos, price, 'square_off');
     return;
   }
 
@@ -101,13 +119,15 @@ async function managePosition(stock, price, nowTime, safeSend) {
       await safeSend(
         `🛑 PAPER STOP · ${stock}\n${pos.qty} sh @ ₹${pos.stop.toFixed(2)} · −₹${loss.toFixed(0)}`,
       );
-      pos.closed = true;
+      pos.realizedPnl = (pos.realizedPnl || 0) - loss;
+      finishPosition(stock, pos, pos.stop, 'stop');
     } else if (price >= pos.target) {
       const partialQty = Math.floor(pos.qty * PARTIAL_EXIT_FRACTION);
       const runnerQty = pos.qty - partialQty;
       const profit = partialQty * (pos.target - pos.entry);
       state.totalRealizedPnl += profit;
       state.targetHitCount += 1;
+      pos.realizedPnl = (pos.realizedPnl || 0) + profit;
       await safeSend(
         `🎯 PAPER TARGET · ${stock}\n` +
           `Book ${partialQty} @ ₹${pos.target.toFixed(2)} · +₹${profit.toFixed(0)}\n` +
@@ -117,6 +137,7 @@ async function managePosition(stock, price, nowTime, safeSend) {
       pos.runnerQty = runnerQty;
       pos.stop = pos.entry;
       pos.highest = price;
+      paperTradeStore.saveIntradayPosition(stock, pos, { sector: pos.sector || null });
     }
   } else {
     if (price > pos.highest) {
@@ -126,15 +147,16 @@ async function managePosition(stock, price, nowTime, safeSend) {
       await safeSend(
         `🏁 PAPER FLAT · ${stock}\n${pos.runnerQty} sh @ breakeven ₹${pos.stop.toFixed(2)}`,
       );
-      pos.closed = true;
+      finishPosition(stock, pos, pos.stop, 'breakeven');
     } else if (price <= pos.highest * (1 - TRAIL_PULLBACK_PCT / 100)) {
       const profit = pos.runnerQty * (price - pos.entry);
       state.totalRealizedPnl += profit;
+      pos.realizedPnl = (pos.realizedPnl || 0) + profit;
       state.trailExitCount += 1;
       await safeSend(
         `🏁 PAPER TRAIL · ${stock}\n${pos.runnerQty} sh @ ₹${price.toFixed(2)} · ₹${profit >= 0 ? '+' : ''}${profit.toFixed(0)}`,
       );
-      pos.closed = true;
+      finishPosition(stock, pos, price, 'trail');
     }
   }
 }

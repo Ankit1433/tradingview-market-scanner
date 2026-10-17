@@ -7,8 +7,8 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Market Scanner" />
-    <title>Scanner Workspace — NSE Market Scanner</title>
+    <meta name="apple-mobile-web-app-title" content="AnkQuant" />
+    <title>AnkQuant — Intraday Scanner</title>
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/icons/market-scanner-192.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -108,6 +108,10 @@
       tbody tr:hover, tbody tr.selected { background: rgba(110,231,172,.055); }
       tbody tr.selected { box-shadow: inset 2px 0 var(--green); }
       .symbol { font-weight: 700; letter-spacing: .01em; }
+      .symbol-cell { display: flex; align-items: flex-start; gap: 8px; }
+      .watch-toggle { display: grid; place-items: center; flex: 0 0 25px; width: 25px; height: 25px; margin: -2px 0 0; padding: 0; border: 1px solid var(--line); border-radius: 7px; color: var(--dim); background: rgba(255,255,255,.025); cursor: pointer; font-size: 16px; line-height: 1; }
+      .watch-toggle:hover, .watch-toggle[aria-pressed="true"] { color: var(--amber); border-color: rgba(244,202,114,.35); background: rgba(244,202,114,.08); }
+      .watch-toggle:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
       .subtext { display: block; margin-top: 2px; color: var(--dim); font-size: 10px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
       .price { font-family: var(--mono); }
       .positive { color: var(--green); }
@@ -183,9 +187,9 @@
   <body>
     <div class="shell">
       <header class="topbar">
-        <a class="brand" href="/app" aria-label="Market Scanner workspace">
-          <div class="brand-mark">MS</div>
-          <div><div class="brand-name">Market Scanner</div><div class="brand-caption">NSE · Intraday workspace</div></div>
+        <a class="brand" href="/app" aria-label="AnkQuant workspace">
+          <div class="brand-mark">AQ</div>
+          <div><div class="brand-name">AnkQuant</div><div class="brand-caption">NSE · Intraday workspace</div></div>
         </a>
         <nav class="nav" aria-label="Main navigation">
           <a class="active" href="/app" aria-current="page">Scanner</a>
@@ -207,7 +211,7 @@
             <p>Review the names in today’s live universe and inspect their latest logged setup.</p>
           </div>
           <div class="intro-actions">
-            <button class="refresh install" id="install-app" type="button" aria-label="Install Market Scanner" title="Install Market Scanner" hidden><span aria-hidden="true">⇧</span> Install</button>
+            <button class="refresh install" id="install-app" type="button" aria-label="Install AnkQuant" title="Install AnkQuant" hidden><span aria-hidden="true">⇧</span> Install</button>
             <button class="refresh" id="refresh" type="button"><span aria-hidden="true">↻</span> Refresh</button>
           </div>
         </section>
@@ -232,6 +236,7 @@
               <label class="search-wrap"><span aria-hidden="true">⌕</span><input class="search" id="search" type="search" placeholder="Search symbol or sector" autocomplete="off" aria-label="Search symbol or sector" /></label>
               <div class="filter-group" role="group" aria-label="Filter scanner rows">
                 <button class="filter-btn active" type="button" data-filter="all" aria-pressed="true">All</button>
+                <button class="filter-btn" id="watchlist-filter" type="button" data-filter="watchlist" aria-pressed="false">Watchlist (0)</button>
                 <button class="filter-btn" type="button" data-filter="signals" aria-pressed="false">With setup</button>
                 <button class="filter-btn" type="button" data-filter="confluence" aria-pressed="false">Confluence</button>
               </div>
@@ -265,6 +270,8 @@
         "use strict";
         var $ = function (id) { return document.getElementById(id); };
         var allStocks = [];
+        var watchlistStorageKey = "ankquant-watchlist-v1";
+        var watchlist = loadWatchlist();
         var marketState = null;
         var lastUpdatedAt = null;
         var activeFilter = "all";
@@ -278,6 +285,51 @@
         var chartMarkup = null;
         var chartMarkupAt = 0;
         var installPrompt = null;
+
+        function loadWatchlist() {
+          try {
+            var saved = JSON.parse(window.localStorage.getItem("ankquant-watchlist-v1") || "[]");
+            return new Set(Array.isArray(saved) ? saved.filter(function (symbol) { return typeof symbol === "string"; }).map(function (symbol) { return symbol.toUpperCase(); }) : []);
+          } catch (_) {
+            return new Set();
+          }
+        }
+
+        function saveWatchlist() {
+          try {
+            window.localStorage.setItem(watchlistStorageKey, JSON.stringify(Array.from(watchlist)));
+            return true;
+          } catch (_) {
+            return false;
+          }
+        }
+
+        function updateWatchlistLabel() {
+          $("watchlist-filter").textContent = "Watchlist (" + watchlist.size + ")";
+        }
+
+        function updateWatchButton(button, symbol) {
+          var saved = watchlist.has(symbol);
+          button.textContent = saved ? "★" : "☆";
+          button.setAttribute("aria-pressed", saved ? "true" : "false");
+          button.setAttribute("aria-label", (saved ? "Remove " : "Add ") + symbol + (saved ? " from" : " to") + " your AnkQuant watchlist");
+          button.title = saved ? "Remove from watchlist" : "Add to watchlist";
+        }
+
+        function toggleWatchlist(symbol) {
+          if (watchlist.has(symbol)) watchlist.delete(symbol);
+          else watchlist.add(symbol);
+          var saved = saveWatchlist();
+          updateWatchlistLabel();
+          Array.prototype.forEach.call(document.querySelectorAll("[data-watch-symbol]"), function (button) {
+            updateWatchButton(button, button.dataset.watchSymbol);
+          });
+          if (activeFilter === "watchlist") renderRows();
+          if (!saved) {
+            $("notice").textContent = "This browser could not save your watchlist. Check its storage settings.";
+            $("notice").classList.add("visible");
+          }
+        }
 
         function isAppInstalled() {
           return window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
@@ -364,6 +416,7 @@
         function stockMatches(stock, query) {
           var text = (stock.symbol + " " + (stock.sector || "")).toLowerCase();
           if (query && text.indexOf(query) === -1) return false;
+          if (activeFilter === "watchlist" && !watchlist.has(stock.symbol)) return false;
           if (activeFilter === "signals" && !stock.lastSignal) return false;
           if (activeFilter === "confluence" && !(stock.lastSignal && stock.lastSignal.confluence)) return false;
           return true;
@@ -391,6 +444,10 @@
               $("empty-state").innerHTML = '<div><b>Could not load scanner data</b>Check the API connection and refresh the page.</div>';
             } else if (allStocks.length && $("search").value.trim()) {
               $("empty-state").innerHTML = '<div><b>No matching stocks</b>Try another symbol or clear the search.</div>';
+            } else if (activeFilter === "watchlist") {
+              $("empty-state").innerHTML = watchlist.size
+                ? '<div><b>No saved stocks in the live universe</b>Your watchlist stays saved in this browser. Check back when those symbols are tracked.</div>'
+                : '<div><b>Your watchlist is empty</b>Tap the ☆ beside a stock to save it here.</div>';
             } else if (marketState && marketState.isOpen && marketState.scanner && (marketState.scanner.intradayReporting === false || marketState.scanner.reporting === false)) {
               $("empty-state").innerHTML = '<div><b>Scanner is not reporting</b>The market is open, but the scanner has not checked in recently. Check the service before relying on this feed.</div>';
             } else if (marketState && marketState.isOpen && (!lastUpdatedAt || Date.now() - new Date(lastUpdatedAt).getTime() > 90000)) {
@@ -409,7 +466,7 @@
             var levelText = levels ? [levels.entry, levels.stop, levels.target].map(function (x) { return x == null ? "—" : n(x); }).join(" / ") : "— / — / —";
             var change = Number(stock.change);
             return '<tr data-symbol="' + esc(stock.symbol) + '" class="' + (stock.symbol === selectedSymbol ? "selected" : "") + '" tabindex="0" aria-label="Open details for ' + esc(stock.symbol) + '">' +
-              '<td><span class="symbol">' + esc(stock.symbol) + '</span><span class="subtext">' + esc(stock.sector || "NSE equity") + '</span></td>' +
+              '<td><div class="symbol-cell"><button class="watch-toggle" type="button" data-watch-symbol="' + esc(stock.symbol) + '" aria-pressed="false" title="Add to watchlist">☆</button><div><span class="symbol">' + esc(stock.symbol) + '</span><span class="subtext">' + esc(stock.sector || "NSE equity") + '</span></div></div></td>' +
               '<td class="price">₹' + n(stock.price) + '</td>' +
               '<td class="mono ' + changeClass(change) + '">' + (change > 0 ? "+" : "") + n(change) + '%</td>' +
               '<td class="volume">' + n(stock.relVolume, 1) + '×</td>' +
@@ -417,6 +474,9 @@
               '<td class="level-cell">' + levelText + '</td>' +
               '</tr>';
           }).join("");
+          Array.prototype.forEach.call(document.querySelectorAll("[data-watch-symbol]"), function (button) {
+            updateWatchButton(button, button.dataset.watchSymbol);
+          });
         }
         function renderDetail(stock) {
           if (!stock) {
@@ -627,16 +687,24 @@
           });
         });
         $("stock-rows").addEventListener('click', function (event) {
+          var watchButton = event.target.closest('[data-watch-symbol]');
+          if (watchButton) {
+            event.stopPropagation();
+            toggleWatchlist(watchButton.dataset.watchSymbol);
+            return;
+          }
           var row = event.target.closest('tr[data-symbol]');
           if (row) selectStock(row.dataset.symbol);
         });
         $("stock-rows").addEventListener('keydown', function (event) {
           if (event.key !== 'Enter' && event.key !== ' ') return;
+          if (event.target.closest('[data-watch-symbol]')) return;
           var row = event.target.closest('tr[data-symbol]');
           if (row) { event.preventDefault(); selectStock(row.dataset.symbol); }
         });
         $("refresh").addEventListener('click', refreshData);
 
+        updateWatchlistLabel();
         refreshData();
         connectStream();
         window.setInterval(refreshData, 30000);

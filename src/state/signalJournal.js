@@ -13,14 +13,15 @@
  *   - signal distribution/frequency becomes measurable rather than a guess
  *   - there's a real dataset to build a swing backtest on later
  *
- * Storage is JSONL (one JSON object per line), appended with a single
- * fs.appendFileSync. That's chosen over rewriting a JSON array because
- * appends stay O(1) as the file grows, and a truncated final line from a
- * crash costs one record rather than corrupting the whole file.
+ * Supabase is the durable store when configured. An append-only JSONL file
+ * remains available for local development and as a fallback if the database
+ * is not reachable.
  */
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
+const supabaseStore = require('../services/supabaseStore');
 
 const DATA_DIR = process.env.SWING_DATA_DIR || path.join(__dirname, '..', '..', 'data');
 const JOURNAL_FILE = path.join(DATA_DIR, 'signal-journal.jsonl');
@@ -34,6 +35,59 @@ let totalCount = 0;
 
 function ensureDir() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+function normalizeRecord(record) {
+  const normalized = {
+    ...record,
+    ts: record.ts || new Date().toISOString(),
+    signals: Array.isArray(record.signals) ? record.signals : [],
+  };
+  normalized.signalCount = normalized.signals.length;
+  normalized.id = normalized.id || crypto.randomUUID();
+  normalized.eventKey = normalized.eventKey || crypto
+    .createHash('sha256')
+    .update(JSON.stringify([
+      normalized.ts,
+      normalized.mode,
+      normalized.symbol,
+      normalized.signals,
+    ]))
+    .digest('hex');
+  return normalized;
+}
+
+function toDatabaseRow(record) {
+  const normalized = normalizeRecord(record);
+  return {
+    id: normalized.id,
+    event_key: normalized.eventKey,
+    occurred_at: normalized.ts,
+    mode: normalized.mode,
+    symbol: normalized.symbol,
+    signal_types: normalized.signals,
+    signal_count: normalized.signalCount,
+    price: normalized.price,
+    confluence: Boolean(normalized.confluence),
+    levels: normalized.levels,
+    context: normalized.context,
+  };
+}
+
+function fromDatabaseRow(row) {
+  return {
+    id: row.id,
+    eventKey: row.event_key,
+    ts: row.occurred_at,
+    mode: row.mode,
+    symbol: row.symbol,
+    signals: row.signal_types || [],
+    signalCount: row.signal_count ?? (row.signal_types || []).length,
+    price: row.price === null ? null : Number(row.price),
+    confluence: Boolean(row.confluence),
+    levels: row.levels || null,
+    context: row.context || null,
+  };
 }
 
 /** Read the journal into memory on boot. A malformed line is skipped, not fatal. */
@@ -52,7 +106,7 @@ function load() {
     recent = [];
     for (const line of slice) {
       try {
-        recent.push(JSON.parse(line));
+        recent.push(normalizeRecord(JSON.parse(line)));
       } catch (_) {
         // A partially-written final line from a crash - skip it.
       }
@@ -63,6 +117,28 @@ function load() {
     console.error(`[journal] load failed: ${e.message}`);
     recent = [];
     loaded = true;
+  }
+}
+
+/** Load the durable history and seed a new Supabase project from the local journal. */
+async function hydrateFromSupabase() {
+  if (!supabaseStore.status().connected) return false;
+
+  try {
+    let result = await supabaseStore.loadSignalEvents(MAX_IN_MEMORY);
+    if (result.total === 0 && recent.length > 0) {
+      await supabaseStore.upsertSignalEvents(recent.map(toDatabaseRow));
+      result = await supabaseStore.loadSignalEvents(MAX_IN_MEMORY);
+    }
+
+    recent = result.rows.map(fromDatabaseRow).reverse();
+    totalCount = Math.max(result.total, recent.length);
+    loaded = true;
+    console.log(`[journal] loaded — ${totalCount} signal(s) from Supabase`);
+    return true;
+  } catch (error) {
+    console.error(`[journal] Supabase load failed: ${error.message}; keeping local journal`);
+    return false;
   }
 }
 
@@ -97,7 +173,7 @@ function rotateIfNeeded() {
 function record(entry) {
   if (!loaded) load();
 
-  const record_ = {
+  const record_ = normalizeRecord({
     ts: new Date().toISOString(),
     mode: entry.mode,
     symbol: entry.symbol,
@@ -107,7 +183,7 @@ function record(entry) {
     confluence: Boolean(entry.confluence),
     levels: entry.levels || null,
     context: entry.context || null,
-  };
+  });
 
   recent.push(record_);
   if (recent.length > MAX_IN_MEMORY) recent.shift();
@@ -119,6 +195,12 @@ function record(entry) {
     if (totalCount % 1000 === 0) rotateIfNeeded();
   } catch (e) {
     console.error(`[journal] append failed: ${e.message}`);
+  }
+
+  if (supabaseStore.status().connected) {
+    supabaseStore.enqueue('signal write', () =>
+      supabaseStore.upsertSignalEvents([toDatabaseRow(record_)]),
+    );
   }
 
   return record_;
@@ -200,4 +282,4 @@ function reset() {
   }
 }
 
-module.exports = { load, record, query, stats, reset, JOURNAL_FILE };
+module.exports = { load, hydrateFromSupabase, record, query, stats, reset, JOURNAL_FILE };

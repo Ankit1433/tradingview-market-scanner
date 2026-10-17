@@ -1,5 +1,5 @@
 {
-  "name": "nse-momentum-scanner",
+  "name": "ankquant",
   "version": "1.0.0",
   "description": "NSE/BSE scanner with two independent modes: live intraday momentum (5-min signals, Telegram alerts, confluence-gated sizing) and daily swing (ATR-based stops, R-multiple targets, persistent multi-day position tracking).",
   "main": "src/index.js",
@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@mathieuc/tradingview": "^3.5.2",
+    "@supabase/server": "^1.9.2",
     "axios": "^1.7.0",
     "dotenv": "^16.6.1",
     "express": "^4.19.2",

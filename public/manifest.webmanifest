@@ -1,8 +1,8 @@
 {
   "id": "/app",
-  "name": "Market Scanner — NSE Workspace",
-  "short_name": "Market Scanner",
-  "description": "A live NSE market scanner workspace for tracked stocks and setups.",
+  "name": "AnkQuant — NSE Workspace",
+  "short_name": "AnkQuant",
+  "description": "AnkQuant live NSE market scanner for tracked stocks and setups.",
   "start_url": "/app",
   "scope": "/",
   "display": "standalone",

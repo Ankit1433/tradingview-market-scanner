@@ -22,6 +22,7 @@ const { ingestState } = require('./ingest');
 const S = require('../config/swingConstants');
 const pkg = require('../../package.json');
 const { getHist, INTERVAL } = require('../services/tvHistory');
+const supabaseStore = require('../services/supabaseStore');
 
 const BOOT_TIME = Date.now();
 const candleCache = new Map();
@@ -153,6 +154,12 @@ router.get('/health', (req, res) => {
     journal: 'ok',
     apiKeyConfigured: API_KEY_CONFIGURED,
   };
+
+  const persistence = supabaseStore.status();
+  if (persistence.incomplete) checks.database = 'supabase-config-incomplete';
+  else if (!persistence.configured) checks.database = 'local-files';
+  else if (!persistence.connected) checks.database = 'supabase-unavailable';
+  else checks.database = persistence.healthy ? 'supabase' : 'supabase-warning';
 
   let journalOk = true;
   try {

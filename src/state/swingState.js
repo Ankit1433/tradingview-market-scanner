@@ -1,25 +1,11 @@
 /**
- * Swing state, persisted to disk.
- *
- * This is the main architectural difference from the intraday side. Intraday
- * state is deliberately ephemeral - resetDailyState() wipes positions every
- * morning, and if the process restarts mid-session you've lost tracking on
- * anything open, which is survivable because intraday positions are closed
- * by 15:15 anyway.
- *
- * A swing position is held for days or weeks. It has to survive both the
- * daily reset and a process restart, otherwise the scanner silently forgets
- * a position you're still holding and stops managing its stop. So swing
- * state is written to disk on every mutation and reloaded on boot.
- *
- * JSON-on-disk is chosen over a database deliberately: the write volume is a
- * handful of mutations a day and the dataset is a few dozen records. Swapping
- * in SQLite or Redis later is a contained change - everything goes through
- * load()/save() here.
+ * Swing portfolio state. Supabase is the durable store when configured;
+ * atomic local JSON remains as a development and connectivity fallback.
  */
 
 const fs = require('fs');
 const path = require('path');
+const supabaseStore = require('../services/supabaseStore');
 
 const DATA_DIR = process.env.SWING_DATA_DIR || path.join(__dirname, '..', '..', 'data');
 const STATE_FILE = path.join(DATA_DIR, 'swing-state.json');
@@ -40,6 +26,7 @@ const emptyState = () => ({
 });
 
 let state = emptyState();
+let loaded = false;
 
 function ensureDir() {
   if (!fs.existsSync(DATA_DIR)) {
@@ -54,16 +41,19 @@ function ensureDir() {
  * the crash it's trying to avoid.
  */
 function load() {
+  if (loaded) return state;
   try {
     ensureDir();
     if (!fs.existsSync(STATE_FILE)) {
       state = emptyState();
+      loaded = true;
       return state;
     }
     const raw = fs.readFileSync(STATE_FILE, 'utf8');
     const parsed = JSON.parse(raw);
     state = { ...emptyState(), ...parsed };
     const openCount = Object.values(state.openPositions).filter((p) => !p.closed).length;
+    loaded = true;
     console.log(`[swingState] loaded — ${openCount} open position(s), ${state.closedTrades.length} closed trade(s)`);
     return state;
   } catch (e) {
@@ -76,12 +66,113 @@ function load() {
       console.error('[swingState] could not back up the unreadable state file');
     }
     state = emptyState();
+    loaded = true;
     return state;
   }
 }
 
+function tradeKeyFor(symbol, openedOn, fallback) {
+  return fallback || `swing:${symbol}:${openedOn || `legacy-${symbol}`}`;
+}
+
+function toPaperTradeRows(snapshot) {
+  const rows = new Map();
+  const closedTrades = Array.isArray(snapshot.closedTrades) ? snapshot.closedTrades : [];
+
+  for (const trade of closedTrades) {
+    if (!trade || !trade.symbol) continue;
+    const symbol = String(trade.symbol).toUpperCase();
+    const tradeKey = tradeKeyFor(symbol, trade.openedOn, trade.tradeKey);
+    rows.set(tradeKey, {
+      trade_key: tradeKey,
+      mode: 'swing',
+      symbol,
+      status: 'closed',
+      opened_on: trade.openedOn || null,
+      closed_at: trade.closedAt || null,
+      entry_price: trade.entry ?? null,
+      initial_stop: trade.initialStop ?? null,
+      current_stop: trade.currentStop ?? null,
+      target_price: trade.target ?? null,
+      quantity: trade.initialQty ?? trade.qty ?? null,
+      remaining_quantity: 0,
+      exit_price: trade.exit ?? null,
+      realized_pnl: trade.pnl ?? 0,
+      exit_reason: trade.reason || null,
+      setup_types: Array.isArray(trade.signals) ? trade.signals : [],
+      metadata: { barsHeld: trade.barsHeld ?? null },
+      updated_at: new Date().toISOString(),
+    });
+  }
+
+  for (const [symbolValue, position] of Object.entries(snapshot.openPositions || {})) {
+    if (!position) continue;
+    const symbol = String(symbolValue).toUpperCase();
+    const tradeKey = tradeKeyFor(symbol, position.openedOn, position.tradeKey);
+    if (rows.has(tradeKey)) continue;
+    rows.set(tradeKey, {
+      trade_key: tradeKey,
+      mode: 'swing',
+      symbol,
+      status: position.closed ? 'closed' : 'open',
+      opened_on: position.openedOn || null,
+      closed_at: position.closedAt || null,
+      entry_price: position.entry ?? null,
+      initial_stop: position.initialStop ?? position.stop ?? null,
+      current_stop: position.stop ?? null,
+      target_price: position.target ?? null,
+      quantity: position.qty ?? null,
+      remaining_quantity: position.closed ? 0 : (position.partialBooked ? position.runnerQty : position.qty),
+      exit_price: position.exitPrice ?? null,
+      realized_pnl: position.realizedPnl ?? 0,
+      exit_reason: position.exitReason || null,
+      setup_types: Array.isArray(position.signals) ? position.signals : [],
+      metadata: {
+        stopBasis: position.stopBasis || null,
+        atrAtEntry: position.atrAtEntry ?? null,
+        barsHeld: position.barsHeld ?? null,
+        partialBooked: Boolean(position.partialBooked),
+      },
+      updated_at: new Date().toISOString(),
+    });
+  }
+
+  return Array.from(rows.values());
+}
+
+/** Restore the durable swing portfolio, or seed Supabase from the local file. */
+async function hydrateFromSupabase() {
+  if (!supabaseStore.status().connected) return false;
+
+  try {
+    const saved = await supabaseStore.loadState('swing');
+    if (saved?.payload && typeof saved.payload === 'object') {
+      const defaults = emptyState();
+      state = {
+        ...defaults,
+        ...saved.payload,
+        openPositions: saved.payload.openPositions || {},
+        closedTrades: Array.isArray(saved.payload.closedTrades) ? saved.payload.closedTrades : [],
+        counters: { ...defaults.counters, ...(saved.payload.counters || {}) },
+      };
+      console.log(`[swingState] restored ${openPositionsList().length} open position(s) from Supabase`);
+    } else {
+      await supabaseStore.saveState('swing', state);
+      console.log('[swingState] seeded Supabase from local state');
+    }
+
+    const rows = toPaperTradeRows(state);
+    if (rows.length) await supabaseStore.upsertPaperTrades(rows);
+    loaded = true;
+    return true;
+  } catch (error) {
+    console.error(`[swingState] Supabase restore failed: ${error.message}; keeping local state`);
+    return false;
+  }
+}
+
 /** Write current state to disk. Atomic (write temp + rename) so a crash mid-write can't truncate the file. */
-function save() {
+function save({ persist = true } = {}) {
   try {
     ensureDir();
     const tmp = `${STATE_FILE}.tmp`;
@@ -89,6 +180,12 @@ function save() {
     fs.renameSync(tmp, STATE_FILE);
   } catch (e) {
     console.error(`[swingState] save failed: ${e.message}`);
+  }
+
+  if (persist && supabaseStore.status().connected) {
+    const snapshot = JSON.parse(JSON.stringify(state));
+    supabaseStore.enqueueState('swing', snapshot);
+    supabaseStore.enqueuePaperTrades(toPaperTradeRows(snapshot));
   }
 }
 
@@ -124,11 +221,13 @@ function markAlerted(dateKey, symbol) {
 /** Wipe everything. Exposed for the API/testing - not called automatically anywhere. */
 function reset() {
   state = emptyState();
-  save();
+  loaded = true;
+  save({ persist: false });
 }
 
 module.exports = {
   load,
+  hydrateFromSupabase,
   save,
   getState,
   openPositionsList,

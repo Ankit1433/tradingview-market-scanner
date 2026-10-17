@@ -1,4 +1,4 @@
-const CACHE_NAME = 'market-scanner-shell-v1';
+const CACHE_NAME = 'market-scanner-shell-v2';
 const APP_SHELL = [
   '/app',
   '/manifest.webmanifest',

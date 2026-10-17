@@ -99,6 +99,7 @@ function openPosition(symbol, entry, atr, structuralStop, meta = {}) {
   const risk = sizing.stopDistance;
 
   state.openPositions[symbol] = {
+    tradeKey: `swing:${symbol}:${meta.dateKey || new Date().toISOString().slice(0, 10)}`,
     entry,
     stop,
     initialStop: stop,
@@ -113,6 +114,7 @@ function openPosition(symbol, entry, atr, structuralStop, meta = {}) {
     barsHeld: 0,
     openedOn: meta.dateKey || null,
     signals: meta.signals || [],
+    realizedPnl: 0,
     closed: false,
   };
 
@@ -123,21 +125,32 @@ function openPosition(symbol, entry, atr, structuralStop, meta = {}) {
 }
 
 function closeOut(symbol, pos, exitPrice, qty, reason, state) {
-  const pnl = qty * (exitPrice - pos.entry);
-  state.totalRealizedPnl += pnl;
+  const finalPnl = qty * (exitPrice - pos.entry);
+  state.totalRealizedPnl += finalPnl;
+  pos.realizedPnl = (pos.realizedPnl || 0) + finalPnl;
   pos.closed = true;
+  pos.exitPrice = exitPrice;
+  pos.exitReason = reason;
+  pos.closedAt = new Date().toISOString();
   state.closedTrades.push({
+    tradeKey: pos.tradeKey,
     symbol,
     entry: pos.entry,
+    initialStop: pos.initialStop,
+    currentStop: pos.stop,
+    target: pos.target,
     exit: exitPrice,
     qty,
-    pnl,
+    initialQty: pos.qty,
+    pnl: pos.realizedPnl,
+    finalPnl,
     reason,
     openedOn: pos.openedOn,
+    closedAt: pos.closedAt,
     barsHeld: pos.barsHeld,
     signals: pos.signals,
   });
-  return pnl;
+  return finalPnl;
 }
 
 /**
@@ -172,6 +185,7 @@ function managePosition(symbol, close, atr) {
       const runnerQty = pos.qty - partialQty;
       const profit = partialQty * (pos.target - pos.entry);
       state.totalRealizedPnl += profit;
+      pos.realizedPnl = (pos.realizedPnl || 0) + profit;
       state.counters.targetHits += 1;
 
       pos.partialBooked = true;
