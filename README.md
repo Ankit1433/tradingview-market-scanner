@@ -22,9 +22,9 @@ codebase:
 - **Intraday** — polls a live universe of high-relative-volume stocks every
   15–30s, evaluates seven 5-minute-timeframe signals per symbol, and sizes a
   position only when multiple signals agree. Flat by 15:15.
-- **Swing** — runs once daily after the close, evaluates six daily-timeframe
-  signals across a structurally-filtered universe, and tracks multi-day
-  positions with ATR-based stops and R-multiple targets.
+- **Swing** — runs once daily at market open (09:15 IST by default), evaluates
+  six daily-timeframe signals across a structurally-filtered universe, and
+  tracks multi-day positions with ATR-based stops and R-multiple targets.
 
 Originally a Python/Colab notebook, rewritten as an Express service.
 
@@ -39,7 +39,7 @@ almost every parameter, and the disagreements are the interesting part:
 | ------------------- | ------------------------------------------ | ------------------------------------------------ |
 | **Candles**         | 5-minute                                   | Daily                                            |
 | **Universe filter** | Already moving (change > 2%, rel vol > 2x) | _Not_ extended today (change < 5%), above 200DMA |
-| **Poll cadence**    | 15–30s tick loop                           | Once daily, after close                          |
+| **Poll cadence**    | 15–30s tick loop                           | Once daily, at market open                       |
 | **Stop basis**      | Fixed points / structural level            | ATR-scaled (2× ATR14), tightened to structure    |
 | **Target**          | Fixed +10 points                           | 2.5R                                             |
 | **Trail**           | 1.5% from peak                             | Chandelier (peak − 2.5× ATR)                     |
@@ -152,7 +152,7 @@ src/
     signalJournal.js      Signal journal — Supabase with JSONL fallback
   jobs/
     scanLoop.js           Intraday cycle — tiered 15–30s polling
-    swingLoop.js          Swing cycle — once daily after close
+    swingLoop.js          Swing cycle — once daily around market open
   backtest/
     backtest.js           Bar-by-bar replay of intraday logic, no look-ahead
   routes/
@@ -357,11 +357,14 @@ ENABLE_SWING=false npm start      # intraday only
 Run the tests — no network access needed:
 
 ```bash
-npm test              # 193 assertions
+npm test              # includes the legacy suite plus the signal-consistency regression
 npm run test:swing    # 65 — swing indicators and position lifecycle
 npm run test:api      # 79 — auth, redaction, SSE, journal, errors
 npm run test:ingest   # 49 — push architecture, batching, failure handling
+npm run test:signal-consistency  # synthetic yesterday fixture across journal/API/SSE/frontend
 ```
+
+Signal consistency checks use a deterministic synthetic fixture instead of live-market data when the market is closed. The fixture is stored at `fixtures/signal-consistency-yesterday.json` and the regression is implemented in `test-signal-consistency.js`.
 
 Run the intraday backtest:
 

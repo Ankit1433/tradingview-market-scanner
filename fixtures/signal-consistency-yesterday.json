@@ -1,0 +1,25 @@
+{
+  "description": "Synthetic yesterday-market fixture used to validate signal consistency across the journal, public API, SSE stream, and frontend rendering.",
+  "records": [
+    {
+      "mode": "intraday",
+      "symbol": "RELIANCE",
+      "signals": ["PULLBACK", "VWAP RECLAIM"],
+      "price": 2450,
+      "confluence": true,
+      "levels": { "entry": 2450, "stop": 2430, "target": 2470 },
+      "context": { "sector": "Energy Minerals", "change": 2.4, "relVolume": 2.1 },
+      "ts": "2026-10-23T09:35:00.000Z"
+    },
+    {
+      "mode": "swing",
+      "symbol": "INFY",
+      "signals": ["BASE BREAKOUT", "RS LEADER"],
+      "price": 1580,
+      "confluence": true,
+      "levels": { "entry": 1580, "stop": 1520, "target": 1650 },
+      "context": { "sector": "Technology Services", "atr": 28, "rsi": 62 },
+      "ts": "2026-10-23T11:00:00.000Z"
+    }
+  ]
+}

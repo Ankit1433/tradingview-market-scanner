@@ -174,7 +174,8 @@ function record(entry) {
   if (!loaded) load();
 
   const record_ = normalizeRecord({
-    ts: new Date().toISOString(),
+    ...entry,
+    ts: entry.ts || new Date().toISOString(),
     mode: entry.mode,
     symbol: entry.symbol,
     signals: entry.signals || [],

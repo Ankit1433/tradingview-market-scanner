@@ -81,11 +81,11 @@ module.exports = {
   // that's deliberate, not an omission.
 
   // ---- Schedule ----
-  // Swing scanning runs on daily closes, not on a live tick loop. Running it
-  // intraday would evaluate signals against an incomplete candle, which is
-  // the single most common way a daily-timeframe backtest silently diverges
-  // from live results.
-  SWING_SCAN_TIME: { h: 15, m: 45 }, // after close, once daily
+  // The swing scan is tuned to run at market open so it can evaluate the prior
+  // close's daily structure and surface entries as soon as the session is live.
+  // This is intentionally earlier than the default after-close scan to pick up
+  // valid setups near 09:15 IST without waiting until the close.
+  SWING_SCAN_TIME: { h: 9, m: 15 }, // market open, once daily
   SWING_SCAN_CHECK_INTERVAL_MS: 5 * 60 * 1000, // how often to check if it's time
 
   SWING_SIGNAL_EMOJI: {
