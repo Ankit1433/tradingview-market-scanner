@@ -12,11 +12,7 @@
 
 const TradingView = require('@mathieuc/tradingview');
 
-const client = new TradingView.Client(
-  process.env.TV_SESSION && process.env.TV_SIGNATURE
-    ? { token: process.env.TV_SESSION, signature: process.env.TV_SIGNATURE }
-    : undefined,
-);
+let client = null;
 
 // A connection-level failure (dropped socket, bad session, etc.) doesn't
 // automatically fire each open chart's onError - without this, every
@@ -24,11 +20,20 @@ const client = new TradingView.Client(
 // instead of failing fast. Track pending resolvers and flush them here.
 const pendingFinishers = new Set();
 
-client.onError((...err) => {
-  console.error('[tvHistory] client error:', ...err);
-  for (const finish of pendingFinishers) finish(null);
-  pendingFinishers.clear();
-});
+function getClient() {
+  if (client) return client;
+  client = new TradingView.Client(
+    process.env.TV_SESSION && process.env.TV_SIGNATURE
+      ? { token: process.env.TV_SESSION, signature: process.env.TV_SIGNATURE }
+      : undefined,
+  );
+  client.onError((...err) => {
+    console.error('[tvHistory] client error:', ...err);
+    for (const finish of pendingFinishers) finish(null);
+    pendingFinishers.clear();
+  });
+  return client;
+}
 
 // interval strings TradingView expects: '5' = 5min, '15' = 15min, 'D' = daily
 const INTERVAL = {
@@ -46,7 +51,8 @@ const INTERVAL = {
 function getHist(symbol, exchange, interval, nBars, { timeoutMs = 12000 } = {}) {
   return new Promise((resolve) => {
     let settled = false;
-    const chart = new client.Session.Chart();
+    const tvClient = getClient();
+    const chart = new tvClient.Session.Chart();
     const finish = (result) => {
       if (settled) return;
       settled = true;
@@ -96,12 +102,12 @@ function getHist(symbol, exchange, interval, nBars, { timeoutMs = 12000 } = {}) 
   });
 }
 
-function closeClient() {
-  try {
-    client.end();
-  } catch (_) {
-    /* ignore */
-  }
+async function closeClient() {
+  const activeClient = client;
+  client = null;
+  for (const finish of pendingFinishers) finish(null);
+  pendingFinishers.clear();
+  if (activeClient) await activeClient.end();
 }
 
 module.exports = { getHist, INTERVAL, closeClient };

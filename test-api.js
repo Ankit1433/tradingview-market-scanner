@@ -106,6 +106,10 @@ async function run() {
     check('reports publicMode', root.body.publicMode === true);
     check('reports adminEnabled', root.body.adminEnabled === true);
 
+    const homepage = await fetch(`${BASE}/`, { headers: { Accept: 'text/html' } });
+    const homepageHtml = await homepage.text();
+    check('GET / serves the scanner homepage to browsers', homepage.status === 200 && homepageHtml.includes('Read the setup.'));
+
     const specRes = await get('/api/docs.json');
     check('OpenAPI spec served', specRes.status === 200 && specRes.body.openapi === '3.0.3');
     check('spec has paths', Object.keys(specRes.body.paths).length > 10, `${Object.keys(specRes.body.paths).length} paths`);

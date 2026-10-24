@@ -112,7 +112,23 @@
       .context-item { padding: 8px; border-radius: 8px; background: rgba(255,255,255,.025); }
       .context-item span { display: block; color: var(--dim); font-size: 10px; }
       .context-item b { display: block; margin-top: 3px; font: 11px var(--mono); }
+      .chart-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 16px; }
+      .chart-intervals { display: flex; gap: 4px; }
+      .chart-interval { padding: 4px 7px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); background: transparent; font: 10px var(--mono); cursor: pointer; }
+      .chart-interval.active { color: var(--green); border-color: rgba(110,231,172,.35); background: rgba(110,231,172,.07); }
+      .chart { min-height: 180px; margin-top: 8px; padding: 7px 5px 3px; border: 1px solid var(--line); border-radius: 9px; background: rgba(4,8,13,.45); overflow: hidden; }
+      .chart svg { display: block; width: 100%; height: auto; }
+      .chart-loading, .chart-error { min-height: 166px; display: grid; place-content: center; padding: 16px; text-align: center; color: var(--dim); font-size: 11px; }
+      .chart-error { color: var(--amber); }
+      .chart-legend { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 7px; color: var(--muted); font: 10px var(--mono); }
+      .chart-legend span { display: inline-flex; align-items: center; gap: 5px; }
+      .chart-key { width: 8px; height: 8px; border-radius: 50%; }
+      .chart-note { margin-top: 5px; color: var(--dim); font-size: 10px; }
       .source-note { margin: 12px 3px 0; color: var(--dim); font-size: 11px; }
+      .site-footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 20px; padding: 14px 3px 0; border-top: 1px solid var(--line); color: var(--dim); font-size: 11px; }
+      .footer-links { display: flex; flex-wrap: wrap; gap: 14px; }
+      .footer-links a { color: var(--muted); }
+      .footer-links a:hover { color: var(--green); }
       @media (max-width: 1080px) { .layout { grid-template-columns: minmax(0,1fr) 285px; } .filters { grid-template-columns: repeat(3,minmax(0,1fr)); } }
       @media (max-width: 800px) { .layout { grid-template-columns: 1fr; } .detail { position: static; } .detail-empty { min-height: 180px; } .topbar { position: static; flex-wrap: wrap; } .feed-status { margin-left: auto; } }
       @media (max-width: 560px) { .shell { width: min(100% - 22px, 1480px); padding-top: 10px; } .brand-caption { display: none; } .nav { margin-left: auto; } .nav a { padding: 7px 8px; font-size: 12px; } .intro { align-items: flex-start; flex-wrap: wrap; margin-top: 24px; } .intro p { font-size: 12px; } .actions { width: 100%; } .actions .button { flex: 1; min-height: 36px; padding: 0 9px; font-size: 11px; } .metrics { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; } .metric { min-height: 77px; padding: 11px; } .metric-value { font-size: 21px; } .filters { grid-template-columns: 1fr 1fr; } .filters .symbol-filter { grid-column: 1 / -1; } .filters .toggle { grid-column: 1 / -1; } .panel-head { padding: 13px; } td, th { padding-left: 9px; padding-right: 9px; } }
@@ -122,9 +138,9 @@
   <body>
     <div class="shell">
       <header class="topbar">
-        <a class="brand" href="/app" aria-label="AnkQuant workspace"><div class="brand-mark">AQ</div><div><div class="brand-name">AnkQuant</div><div class="brand-caption">NSE · Research workspace</div></div></a>
+        <a class="brand" href="/" aria-label="AnkQuant home"><div class="brand-mark">AQ</div><div><div class="brand-name">AnkQuant</div><div class="brand-caption">NSE · Research workspace</div></div></a>
         <nav class="nav" aria-label="Main navigation">
-          <a href="/app">Scanner</a>
+          <a href="/">Scanner</a>
           <a class="active" href="/journal" aria-current="page">Journal</a>
           <a href="/demo">Signal tape</a>
         </nav>
@@ -170,6 +186,10 @@
           </aside>
         </section>
         <p class="source-note">The API returns up to 500 recent matches per request. Filters narrow that window; the journal stores more records than this page loads at once.</p>
+        <footer class="site-footer">
+          <span>Market research only · Not financial advice.</span>
+          <nav class="footer-links" aria-label="More AnkQuant pages"><a href="/">Scanner</a><a href="/demo">Signal tape</a><a href="/api/docs">API docs</a></nav>
+        </footer>
       </main>
     </div>
 
@@ -182,6 +202,10 @@
         var selectedKey = null;
         var requestId = 0;
         var eventTimer = null;
+        var chartRequestId = 0;
+        var activeChartKey = null;
+        var renderedDetailKey = null;
+        var chartInterval = "5m";
 
         function esc(value) {
           return String(value == null ? "" : value).replace(/[&<>"']/g, function (ch) {
@@ -242,6 +266,9 @@
             $("detail").innerHTML = '<div class="detail-empty"><div><b>No matching signal</b>Adjust the filters to see journal details.</div></div>';
             $("detail-meta").textContent = "No selection";
             selectedKey = null;
+            activeChartKey = null;
+            renderedDetailKey = null;
+            chartRequestId += 1;
             return;
           }
           $("signal-rows").innerHTML = currentRows.map(function (signal, index) {
@@ -259,11 +286,12 @@
               '</tr>';
           }).join("");
           $("window-meta").textContent = records.length >= 500 ? "Latest 500 matches loaded · narrow filters to inspect a smaller set" : records.length + " recent journal record(s) loaded";
-          if (selectedKey) {
-            var stillSelected = currentRows.find(function (row) { return signalKey(row) === selectedKey; });
-            if (stillSelected) renderDetail(stillSelected);
-            else { selectedKey = null; renderDetail(null); }
-          }
+          var selectedSignal = selectedKey
+            ? currentRows.find(function (row) { return signalKey(row) === selectedKey; })
+            : null;
+          if (!selectedSignal) selectedSignal = currentRows[0];
+          selectedKey = signalKey(selectedSignal);
+          if (renderedDetailKey !== selectedKey) renderDetail(selectedSignal);
         }
         function contextItem(label, value) {
           if (value == null || value === "") return "";
@@ -273,8 +301,17 @@
           if (!signal) {
             $("detail-meta").textContent = "Select a row";
             $("detail").innerHTML = '<div class="detail-empty"><div><b>Select a signal</b>Choose a journal row to inspect its recorded setup and market context.</div></div>';
+            activeChartKey = null;
+            renderedDetailKey = null;
+            chartRequestId += 1;
             return;
           }
+          var key = signalKey(signal);
+          if (activeChartKey !== key) {
+            chartInterval = signal.mode === "swing" ? "1d" : "5m";
+            activeChartKey = key;
+          }
+          renderedDetailKey = key;
           var levels = signal.levels || {};
           var context = signal.context || {};
           $("detail-meta").textContent = displayTime(signal.ts);
@@ -290,9 +327,121 @@
           ].join("");
           $("detail").innerHTML = '<div class="detail-body"><div class="detail-symbol">' + esc(signal.symbol) + '</div><div class="detail-time">' + esc(displayTime(signal.ts)) + ' · ' + esc(signal.mode) + '</div>' +
             '<div class="detail-price">' + (signal.price == null ? '—' : '₹' + n(signal.price)) + '</div>' +
+            '<div class="chart-heading"><div class="section-label" style="margin:0">Recent price action</div><div class="chart-intervals" role="group" aria-label="Chart interval">' +
+              '<button class="chart-interval ' + (chartInterval === "5m" ? "active" : "") + '" type="button" data-interval="5m" aria-pressed="' + (chartInterval === "5m") + '">5 min</button>' +
+              '<button class="chart-interval ' + (chartInterval === "1d" ? "active" : "") + '" type="button" data-interval="1d" aria-pressed="' + (chartInterval === "1d") + '">Daily</button>' +
+            '</div></div><div class="chart" id="signal-chart"><div class="chart-loading">Loading price history…</div></div>' +
+            '<div class="chart-legend" id="chart-legend"></div><div class="chart-note">Latest available candles. Dashed lines mark saved setup levels when in range.</div>' +
             '<div class="section-label">Signals recorded together</div><div class="signal-list">' + tags(signal) + '</div>' +
             '<div class="detail-note" style="margin-top:9px"><strong>' + (signal.confluence ? 'Confluence gate cleared' : 'Below confluence gate') + '</strong> · ' + esc(signal.signalCount || (signal.signals || []).length) + ' signal(s)</div>' +
             levelBlock + (contextHtml ? '<div class="section-label">Market context</div><div class="context-grid">' + contextHtml + '</div>' : '') + '</div>';
+          loadChart(signal, chartInterval);
+        }
+        function chartLabel(timestamp, interval) {
+          var date = new Date(Number(timestamp) * 1000);
+          if (isNaN(date.getTime())) return "";
+          return interval === "1d"
+            ? date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", timeZone: "Asia/Kolkata" })
+            : date.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" });
+        }
+        function drawChart(signal, candles, interval) {
+          if (!Array.isArray(candles) || candles.length < 2) return null;
+          var width = 420;
+          var height = 230;
+          var left = 8;
+          var right = 58;
+          var top = 10;
+          var bottom = 26;
+          var plotWidth = width - left - right;
+          var plotHeight = height - top - bottom;
+          var values = [];
+          candles.forEach(function (candle) {
+            ["high", "low"].forEach(function (key) {
+              var value = Number(candle[key]);
+              if (isFinite(value)) values.push(value);
+            });
+          });
+          if (values.length < 2) return null;
+          var minPrice = Math.min.apply(null, values);
+          var maxPrice = Math.max.apply(null, values);
+          if (maxPrice === minPrice) {
+            var offset = Math.max(maxPrice * .005, .05);
+            minPrice -= offset;
+            maxPrice += offset;
+          }
+          var range = maxPrice - minPrice;
+          var levels = signal.levels || {};
+          var levelDefs = [
+            { key: "entry", label: "Entry", color: "#7bcfff" },
+            { key: "stop", label: "Stop", color: "#ff7d89" },
+            { key: "target", label: "Target", color: "#6ee7ac" },
+          ].filter(function (level) {
+            var price = Number(levels[level.key]);
+            return levels[level.key] != null && isFinite(price) && price >= minPrice - range * .12 && price <= maxPrice + range * .12;
+          });
+          levelDefs.forEach(function (level) {
+            var price = Number(levels[level.key]);
+            minPrice = Math.min(minPrice, price);
+            maxPrice = Math.max(maxPrice, price);
+          });
+          var pad = (maxPrice - minPrice) * .08 || Math.max(maxPrice * .005, .05);
+          minPrice -= pad;
+          maxPrice += pad;
+          var y = function (price) { return top + ((maxPrice - Number(price)) / (maxPrice - minPrice)) * plotHeight; };
+          var step = plotWidth / candles.length;
+          var bodyWidth = Math.max(1.5, Math.min(8, step * .55));
+          var grid = [];
+          for (var g = 0; g <= 3; g += 1) {
+            var gy = top + plotHeight * g / 3;
+            var price = maxPrice - (maxPrice - minPrice) * g / 3;
+            grid.push('<line x1="' + left + '" y1="' + gy.toFixed(1) + '" x2="' + (width - right + 2) + '" y2="' + gy.toFixed(1) + '" stroke="rgba(255,255,255,.08)" />');
+            grid.push('<text x="' + (width - right + 7) + '" y="' + (gy + 3).toFixed(1) + '" fill="#718096" font-size="10" font-family="IBM Plex Mono, monospace">' + esc(n(price)) + '</text>');
+          }
+          var bars = candles.map(function (candle, index) {
+            var x = left + (index + .5) * step;
+            var openY = y(candle.open);
+            var closeY = y(candle.close);
+            var highY = y(candle.high);
+            var lowY = y(candle.low);
+            var color = Number(candle.close) >= Number(candle.open) ? "#6ee7ac" : "#ff7d89";
+            return '<g><line x1="' + x.toFixed(1) + '" y1="' + highY.toFixed(1) + '" x2="' + x.toFixed(1) + '" y2="' + lowY.toFixed(1) + '" stroke="' + color + '" stroke-width="1"/><rect x="' + (x - bodyWidth / 2).toFixed(1) + '" y="' + Math.min(openY, closeY).toFixed(1) + '" width="' + bodyWidth.toFixed(1) + '" height="' + Math.max(1.3, Math.abs(closeY - openY)).toFixed(1) + '" rx=".5" fill="' + color + '"/></g>';
+          }).join("");
+          var levelLines = levelDefs.map(function (level) {
+            var levelY = y(levels[level.key]);
+            return '<line x1="' + left + '" y1="' + levelY.toFixed(1) + '" x2="' + (width - right + 2) + '" y2="' + levelY.toFixed(1) + '" stroke="' + level.color + '" stroke-width="1" stroke-dasharray="4 3" opacity=".8"/>';
+          }).join("");
+          var timeLabels = [0, Math.floor((candles.length - 1) / 2), candles.length - 1].map(function (index, labelIndex) {
+            var x = left + (index + .5) * step;
+            var anchor = labelIndex === 0 ? "start" : labelIndex === 2 ? "end" : "middle";
+            return '<text x="' + x.toFixed(1) + '" y="' + (height - 6) + '" text-anchor="' + anchor + '" fill="#718096" font-size="9" font-family="IBM Plex Mono, monospace">' + esc(chartLabel(candles[index].time, interval)) + '</text>';
+          }).join("");
+          return {
+            svg: '<svg viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="' + esc(interval === "1d" ? "Daily" : "5-minute") + ' candlestick chart for ' + esc(signal.symbol) + '">' + grid.join("") + levelLines + bars + timeLabels + '</svg>',
+            legend: levelDefs.map(function (level) {
+              return '<span><i class="chart-key" style="background:' + level.color + '"></i>' + esc(level.label) + ' ₹' + n(levels[level.key]) + '</span>';
+            }).join(""),
+          };
+        }
+        async function loadChart(signal, interval) {
+          var request = ++chartRequestId;
+          var container = $("signal-chart");
+          if (!container) return;
+          var limit = interval === "1d" ? 120 : 60;
+          container.innerHTML = '<div class="chart-loading">Loading ' + (interval === "1d" ? "daily" : "5-minute") + ' candles…</div>';
+          $("chart-legend").innerHTML = "";
+          try {
+            var response = await fetch('/api/public/candles/' + encodeURIComponent(signal.symbol) + '?interval=' + interval + '&limit=' + limit, { headers: { Accept: 'application/json' } });
+            var payload = await response.json();
+            if (request !== chartRequestId || activeChartKey !== signalKey(signal) || chartInterval !== interval) return;
+            if (!response.ok) throw new Error(payload.error || "Price history is unavailable.");
+            var chart = drawChart(signal, payload.candles, interval);
+            if (!chart) throw new Error("No usable candles were returned for this symbol.");
+            container.innerHTML = chart.svg;
+            $("chart-legend").innerHTML = chart.legend;
+          } catch (error) {
+            if (request !== chartRequestId || activeChartKey !== signalKey(signal)) return;
+            container.innerHTML = '<div class="chart-error">' + esc(error.message || "Price history is temporarily unavailable.") + '</div>';
+          }
         }
         async function loadRecords() {
           var id = ++requestId;
@@ -387,6 +536,14 @@
           if (!signal) return;
           selectedKey = signalKey(signal);
           renderRows();
+        });
+        $("detail").addEventListener("click", function (event) {
+          var button = event.target.closest("button[data-interval]");
+          if (!button || button.dataset.interval === chartInterval) return;
+          var signal = currentRows.find(function (row) { return signalKey(row) === selectedKey; });
+          if (!signal) return;
+          chartInterval = button.dataset.interval;
+          renderDetail(signal);
         });
         loadRecords();
         connectStream();

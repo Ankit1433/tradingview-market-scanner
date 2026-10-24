@@ -207,6 +207,12 @@ function record(entry) {
   return record_;
 }
 
+function hasEvent(entry) {
+  if (!loaded) load();
+  const candidate = normalizeRecord(entry);
+  return recent.some((record_) => record_.eventKey === candidate.eventKey);
+}
+
 /** Most recent signals, newest first, with optional filters. */
 function query({ limit = 50, mode = null, type = null, symbol = null, confluenceOnly = false } = {}) {
   if (!loaded) load();
@@ -283,4 +289,4 @@ function reset() {
   }
 }
 
-module.exports = { load, hydrateFromSupabase, record, query, stats, reset, JOURNAL_FILE };
+module.exports = { load, hydrateFromSupabase, record, hasEvent, query, stats, reset, JOURNAL_FILE };

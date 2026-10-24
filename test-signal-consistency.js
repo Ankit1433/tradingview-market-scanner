@@ -11,6 +11,7 @@ const path = require('path');
 const { createServer } = require('./src/server');
 const journal = require('./src/state/signalJournal');
 const swingState = require('./src/state/swingState');
+const { closeClient } = require('./src/services/tvHistory');
 
 const FIXTURE_PATH = path.join(__dirname, 'fixtures', 'signal-consistency-yesterday.json');
 const PORT = 4612;
@@ -85,6 +86,11 @@ async function main() {
       context: record.context,
     });
   }
+  const persistedRecords = fs.readFileSync(journal.JOURNAL_FILE, 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line));
+  assert('journal file persists each original fixture timestamp', fixture.records.every((record) => persistedRecords.some((saved) => saved.symbol === record.symbol && saved.ts === record.ts)), JSON.stringify(persistedRecords.map((record) => ({ symbol: record.symbol, ts: record.ts }))));
 
   const app = createServer();
   const server = app.listen(PORT);
@@ -96,6 +102,7 @@ async function main() {
     assert('API returns the same symbols from the fixture', recent.body.signals.map((entry) => entry.symbol).sort().join(',') === 'INFY,RELIANCE', JSON.stringify(recent.body.signals.map((entry) => entry.symbol)));
     assert('API preserves the recorded signal labels', recent.body.signals.every((entry) => Array.isArray(entry.signals) && entry.signals.length >= 2), JSON.stringify(recent.body.signals));
     assert('API preserves the signalCount metadata', recent.body.signals.every((entry) => entry.signalCount === entry.signals.length), JSON.stringify(recent.body.signals));
+    assert('API preserves each fixture timestamp exactly', recent.body.signals.every((entry) => fixture.records.some((record) => record.symbol === entry.symbol && record.ts === entry.ts)), JSON.stringify(recent.body.signals.map((entry) => ({ symbol: entry.symbol, ts: entry.ts }))));
 
     const byMode = await getJson(`${BASE}/api/public/signals/recent?mode=intraday`);
     assert('mode filter matches intraday records only', byMode.status === 200 && byMode.body.count === 1 && byMode.body.signals[0].symbol === 'RELIANCE', JSON.stringify(byMode.body));
@@ -103,6 +110,7 @@ async function main() {
     const streamText = await readSseSnippet(`${BASE}/api/public/stream?mode=intraday`);
     assert('SSE stream is reachable for the selected mode', streamText.includes('event: connected'), `payload=${streamText.slice(0, 200)}`);
     assert('SSE stream replays the matching intraday signal record', streamText.includes('RELIANCE') && streamText.includes('PULLBACK'), streamText.slice(0, 400));
+    assert('SSE replay preserves the fixture timestamp exactly', streamText.includes('"ts":"2026-10-23T09:35:00.000Z"'), streamText.slice(0, 600));
 
     const stats = await getJson(`${BASE}/api/public/stats`);
     assert('journal stats aggregate yesterday-sized fixture without drift', stats.status === 200 && stats.body.signals.totalRecorded === 2, JSON.stringify(stats.body.signals));
@@ -117,6 +125,7 @@ async function main() {
     console.log('\nSignal consistency check passed.');
   } finally {
     server.close();
+    server.closeAllConnections?.();
   }
 }
 
@@ -124,4 +133,4 @@ main().catch((error) => {
   console.error('\nSignal consistency check failed.');
   console.error(error.stack || error.message);
   process.exit(1);
-});
+}).finally(() => closeClient());

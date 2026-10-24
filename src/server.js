@@ -32,6 +32,9 @@ function createServer() {
   app.use('/api', rateLimit);
 
   app.get('/', (req, res) => {
+    if (req.get('accept')?.includes('text/html')) {
+      return res.sendFile(path.join(__dirname, '..', 'public', 'scanner.html'));
+    }
     res.json({
       name: 'AnkQuant API',
       version: pkg.version,

@@ -8,10 +8,12 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "backtest": "node src/backtest/backtest.js",
+    "backfill:swing": "node scripts/backfill-swing.js",
     "test:swing": "node test-swing.js",
+    "test:swing-backfill": "node test-swing-backfill.js",
     "test:api": "node test-api.js",
     "test:signal-consistency": "node test-signal-consistency.js",
-    "test": "node test-swing.js && node test-api.js && node test-ingest.js && node test-signal-consistency.js",
+    "test": "node test-swing.js && node test-swing-backfill.js && node test-api.js && node test-ingest.js && node test-signal-consistency.js",
     "test:ingest": "node test-ingest.js"
   },
   "dependencies": {

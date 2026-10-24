@@ -303,20 +303,20 @@ console.log('\n=== POSITION LIFECYCLE ===');
 
   // Hit target -> partial book, stop to breakeven
   msgs = managePosition('TESTCO', 108, 2);
-  check('target fires a partial book', msgs.some((m) => m.includes('SWING TARGET')), JSON.stringify(msgs));
+  check('target fires a partial book', msgs.some((m) => m.includes('PAPER TARGET')), JSON.stringify(msgs));
   check('partialBooked set', st.openPositions.TESTCO.partialBooked === true);
   check('stop moved to breakeven', st.openPositions.TESTCO.stop === 100, `got ${st.openPositions.TESTCO.stop}`);
   check('target hit counter incremented', st.counters.targetHits === 1);
 
   // Runner rises -> trail should raise
   msgs = managePosition('TESTCO', 120, 2);
-  check('trail raises on a new peak', msgs.some((m) => m.includes('TRAIL RAISED')), JSON.stringify(msgs));
+  check('trail raises on a new peak', msgs.some((m) => m.includes('PAPER TRAIL ·')), JSON.stringify(msgs));
   const raisedStop = st.openPositions.TESTCO.stop;
   check('trail stop is peak - 2.5*ATR', Math.abs(raisedStop - (120 - 5)) < 0.001, `got ${raisedStop}`);
 
   // Drop below trail -> exit
   msgs = managePosition('TESTCO', 110, 2);
-  check('trail exit fires', msgs.some((m) => m.includes('TRAIL EXIT')), JSON.stringify(msgs));
+  check('trail exit fires', msgs.some((m) => m.includes('PAPER TRAIL EXIT')), JSON.stringify(msgs));
   check('position marked closed', st.openPositions.TESTCO.closed === true);
   check('trade journaled', st.closedTrades.length === 1);
   check('trail exit counter incremented', st.counters.trailExits === 1);
@@ -325,7 +325,7 @@ console.log('\n=== POSITION LIFECYCLE ===');
   swingState.reset();
   openPosition('STOPCO', 100, 2, 97, { dateKey: '2026-01-01', signals: ['MA PULLBACK'] });
   msgs = managePosition('STOPCO', 96, 2);
-  check('stop fires when price closes below it', msgs.some((m) => m.includes('SWING STOP')), JSON.stringify(msgs));
+  check('stop fires when price closes below it', msgs.some((m) => m.includes('PAPER STOP')), JSON.stringify(msgs));
   const st2 = swingState.getState();
   check('loss recorded as negative P&L', st2.totalRealizedPnl < 0, `got ${st2.totalRealizedPnl}`);
   check('stop counter incremented', st2.counters.stopHits === 1);
@@ -336,7 +336,7 @@ console.log('\n=== POSITION LIFECYCLE ===');
   let timeStopFired = false;
   for (let d = 0; d < S.SWING_TIME_STOP_DAYS + 1; d++) {
     const m = managePosition('SLOWCO', 101, 2); // drifts, never reaches 1R (=103)
-    if (m.some((x) => x.includes('TIME STOP'))) timeStopFired = true;
+    if (m.some((x) => x.includes('PAPER TIME EXIT'))) timeStopFired = true;
   }
   check('time stop fires on a stalled position', timeStopFired);
   check('time stop counter incremented', swingState.getState().counters.timeStops === 1);

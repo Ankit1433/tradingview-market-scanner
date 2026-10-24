@@ -359,12 +359,70 @@ Run the tests — no network access needed:
 ```bash
 npm test              # includes the legacy suite plus the signal-consistency regression
 npm run test:swing    # 65 — swing indicators and position lifecycle
-npm run test:api      # 79 — auth, redaction, SSE, journal, errors
+npm run test:api      # 81 — auth, redaction, SSE, journal, errors, homepage
 npm run test:ingest   # 49 — push architecture, batching, failure handling
 npm run test:signal-consistency  # synthetic yesterday fixture across journal/API/SSE/frontend
+npm run test:swing-backfill      # deterministic, offline history-backfill regression
+npm run backfill:swing -- --sessions=2  # fetch latest completed swing setups to Supabase
 ```
 
-Signal consistency checks use a deterministic synthetic fixture instead of live-market data when the market is closed. The fixture is stored at `fixtures/signal-consistency-yesterday.json` and the regression is implemented in `test-signal-consistency.js`.
+### Reproduce signal consistency checks
+
+The consistency regression uses deterministic synthetic records rather than
+live-market signals. It writes to `/tmp/signal-consistency-data`, starts a
+local API on port `4612`, and checks the persisted journal, REST response,
+mode-filtered SSE replay, stats histogram, and frontend signal-field contract.
+It does not require API credentials or contact market-data providers:
+
+```bash
+npm run test:signal-consistency
+npm run test:api
+```
+
+The fixture is `fixtures/signal-consistency-yesterday.json`; the assertions
+are in `test-signal-consistency.js`. For a manual UI comparison, start the app
+with test-safe settings and open `/journal` and `/app` in a browser:
+
+```bash
+SWING_DATA_DIR=/tmp/ankquant-ui-check ENABLE_INTRADAY=false ENABLE_SWING=false npm start
+```
+
+With the app running, these read-only requests show the same journal records
+as the pages consume. They can also be added as GET requests in Postman:
+
+```text
+http://localhost:4000/api/public/signals/recent?limit=20
+http://localhost:4000/api/public/signals/recent?mode=intraday&limit=20
+http://localhost:4000/api/public/stats
+http://localhost:4000/api/public/stream?mode=intraday
+```
+
+For SSE, use `curl -N` on the stream URL or a Postman request that supports
+Server-Sent Events. The stream sends a `connected` event and replays recent
+matching signals on connection. Compare `ts`, `mode`, `symbol`, `signals`,
+`signalCount`, `price`, and `levels` with the REST record and the selected
+signal detail on the journal page. The automated frontend assertions check
+that the pages consume the canonical signal fields; visual rendering remains
+a manual browser check.
+
+### Populate recent swing setups outside the scheduled scan
+
+The normal swing loop remains scheduled at 09:15 IST and is unchanged. To
+populate the signal journal and Supabase with setups from the latest completed
+daily candles without waiting for that schedule, run:
+
+```bash
+npm run backfill:swing -- --sessions=2
+```
+
+This command requires a healthy Supabase connection and a working TradingView
+history feed. It evaluates the latest two completed daily sessions (skipping
+today's still-forming candle before 15:30 IST), records qualifying swing setups
+with the historical candle timestamp, and skips records already in the loaded
+journal. It does not open or manage paper positions, send Telegram alerts, or
+change the scheduled scan time. `--sessions` accepts 1–5 completed sessions.
+The screener universe is the current TradingView swing universe; historical
+membership of the screener universe is not available from the upstream source.
 
 Run the intraday backtest:
 

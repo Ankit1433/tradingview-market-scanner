@@ -249,7 +249,7 @@ async function getIndexReturn(symbol = 'NIFTY', { dropPartialBar = false } = {})
  */
 async function evaluateSwingSignals(symbol, indexReturnPct, opts = {}) {
   try {
-    const candles = await loadDaily(symbol, opts);
+    const candles = opts.candles || await loadDaily(symbol, opts);
     if (!candles) return null;
 
     const last = candles[candles.length - 1];

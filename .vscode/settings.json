@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^git status --short && printf '\\\\n--- package scripts ---\\\\n' && node -e \"console\\.log\\(JSON\\.stringify\\(require\\('\\./package\\.json'\\)\\.scripts,null,2\\)\\)\"$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}
