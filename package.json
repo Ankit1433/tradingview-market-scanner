@@ -10,7 +10,8 @@
     "backtest": "node src/backtest/backtest.js",
     "test:swing": "node test-swing.js",
     "test:api": "node test-api.js",
-    "test": "node test-swing.js && node test-api.js && node test-ingest.js",
+    "test:nodeversion": "node test-node-version.js",
+    "test": "node test-swing.js && node test-api.js && node test-ingest.js && node test-node-version.js",
     "test:ingest": "node test-ingest.js"
   },
   "dependencies": {
