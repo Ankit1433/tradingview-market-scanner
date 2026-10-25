@@ -11,7 +11,8 @@
     "test:swing": "node test-swing.js",
     "test:api": "node test-api.js",
     "test:nodeversion": "node test-node-version.js",
-    "test": "node test-swing.js && node test-api.js && node test-ingest.js && node test-node-version.js",
+    "test:bodyparser": "node test-body-parser.js",
+    "test": "node test-swing.js && node test-api.js && node test-ingest.js && node test-node-version.js && node test-body-parser.js",
     "test:ingest": "node test-ingest.js"
   },
   "dependencies": {
@@ -21,6 +22,9 @@
     "express": "^4.19.2",
     "node-cron": "^3.0.3",
     "uuid": "^11.0.0"
+  },
+  "overrides": {
+    "body-parser": "^2.4.0"
   },
   "engines": {
     "node": ">=18"
