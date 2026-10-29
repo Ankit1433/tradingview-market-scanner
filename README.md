@@ -22,7 +22,7 @@ codebase:
 - **Intraday** — polls a live universe of high-relative-volume stocks every
   15–30s, evaluates seven 5-minute-timeframe signals per symbol, and sizes a
   position only when multiple signals agree. Flat by 15:15.
-- **Swing** — runs once daily at market open (09:15 IST by default), evaluates
+- **Swing** — runs once daily after the close (15:45 IST by default), evaluates
   six daily-timeframe signals across a structurally-filtered universe, and
   tracks multi-day positions with ATR-based stops and R-multiple targets.
 
@@ -39,11 +39,11 @@ almost every parameter, and the disagreements are the interesting part:
 | ------------------- | ------------------------------------------ | ------------------------------------------------ |
 | **Candles**         | 5-minute                                   | Daily                                            |
 | **Universe filter** | Already moving (change > 2%, rel vol > 2x) | _Not_ extended today (change < 5%), above 200DMA |
-| **Poll cadence**    | 15–30s tick loop                           | Once daily, at market open                       |
+| **Poll cadence**    | 15–30s tick loop                           | Once daily, after the close                       |
 | **Stop basis**      | Fixed points / structural level            | ATR-scaled (2× ATR14), tightened to structure    |
 | **Target**          | Fixed +10 points                           | 2.5R                                             |
 | **Trail**           | 1.5% from peak                             | Chandelier (peak − 2.5× ATR)                     |
-| **Confluence gate** | 3+ signals                                 | 2+ signals                                       |
+| **Confluence gate** | 3+ signals                                 | 3+ signals                                       |
 | **Time limit**      | Square-off at 15:15                        | Time stop at 15 sessions under 1R                |
 | **State**           | In-memory, wiped daily                     | Persisted to disk                                |
 
@@ -55,12 +55,7 @@ today is a _bad_ swing entry, because your stop now sits far below and your
 risk-per-share is inflated by the move you missed. So the swing screener
 explicitly excludes stocks up more than 5% on the day.
 
-**The confluence gate is lower for swing (2 vs 3), not higher.** Daily signals
-are individually much rarer than 5-minute ones — a daily base breakout is a
-genuine event, where a 5-minute one happens constantly. Requiring three
-simultaneous daily signals would produce almost no trades. The intraday gate
-was raised to 3 after live data showed 2 agreeing 5-min signals was often just
-two common conditions coinciding by chance.
+**Both confluence gates require three signals.** Swing entry confluence also requires a structural entry/stop signal. Contextual uptrend signals alone cannot define a paper entry.
 
 ---
 
@@ -152,7 +147,7 @@ src/
     signalJournal.js      Signal journal — Supabase with JSONL fallback
   jobs/
     scanLoop.js           Intraday cycle — tiered 15–30s polling
-    swingLoop.js          Swing cycle — once daily around market open
+    swingLoop.js          Swing cycle — once daily after the close
   backtest/
     backtest.js           Bar-by-bar replay of intraday logic, no look-ahead
   routes/
@@ -407,7 +402,7 @@ a manual browser check.
 
 ### Populate recent swing setups outside the scheduled scan
 
-The normal swing loop remains scheduled at 09:15 IST and is unchanged. To
+The normal swing loop defaults to 15:45 IST. To
 populate the signal journal and Supabase with setups from the latest completed
 daily candles without waiting for that schedule, run:
 
@@ -417,7 +412,7 @@ npm run backfill:swing -- --sessions=2
 
 This command requires a healthy Supabase connection and a working TradingView
 history feed. It evaluates the latest two completed daily sessions (skipping
-today's still-forming candle before 15:30 IST), records qualifying swing setups
+today's still-forming candle before the configured completion cutoff (15:45 IST by default)), records qualifying swing setups
 with the historical candle timestamp, and skips records already in the loaded
 journal. It does not open or manage paper positions, send Telegram alerts, or
 change the scheduled scan time. `--sessions` accepts 1–5 completed sessions.
@@ -460,10 +455,7 @@ Secrets go in `.env`, never in source. `.gitignore` covers `.env` and `data/`.
 
 ## Known gaps
 
-- **The swing side has no backtest.** The intraday backtest replays 5-minute
-  bars; there's no daily-timeframe equivalent yet. `test-swing.js` verifies
-  the signal maths and position lifecycle against synthetic data, which is not
-  the same as measuring whether the signals are profitable.
+- **Swing replay uses a supplied universe.** See `PHASE1.md` for its OHLC simulation assumptions and differences from live close-based paper management.
 - **Swing exits are evaluated on daily closes only.** If a stock gaps through
   your stop intraday, this won't know until the next scan. Real protection is
   a stop-loss order resting with your broker, not this.
@@ -472,3 +464,82 @@ Secrets go in `.env`, never in source. `.gitignore` covers `.env` and `data/`.
 
 Built for personal use. Nothing here is financial advice, and no signal carries
 any guarantee of profitability. Trading carries substantial risk of loss.
+
+## Phase 0: completed sessions and calendar
+
+Daily stock/index evaluation, on-demand analysis, paper position management,
+and backfill share an IST completed-bar rule. Today's daily bar is excluded
+until `SWING_BAR_COMPLETE_TIME` (default `15:45`); invalid, future, weekend,
+and configured holiday bars are excluded. Earlier valid sessions are retained.
+`SWING_SCAN_TIME` defaults to the completion time and must not precede it.
+Both values use `HH:MM` IST and must be at or after 15:30. Manual scans still
+use completed bars; repeated management of the same bar does not age a position.
+
+Both schedulers use `src/config/nseCalendar.js`, as does market status.
+The inherited 2026 dates remain **unverified** pending an official NSE equity
+calendar check; the bank-closing entry has been removed. Missing years warn
+once and use weekend checks plus available data; unverified years also warn.
+Special sessions can be configured explicitly with open/close/completion times.
+Update and verify the calendar annually. No database migration is required;
+`lastManagedDate` is an additive field in persisted paper-position state.
+
+Run `npm run test:phase0` for injected-clock regressions and `npm test` for all
+suites. Start locally with `ENABLE_INTRADAY=false ENABLE_SWING=false npm start`;
+inspect `/api/public/market/status` and `/api/swing/health` for the configured
+schedule. `/api/swing/analyze/RELIANCE` requires working TradingView access and
+returns the evaluated bar timestamp when a setup is available. All positions
+and outcomes remain paper/informational; no orders are placed.
+
+## Phase 1: paper evidence and swing replay
+
+See [PHASE1.md](PHASE1.md) for calculation conventions, the additive database
+migration, split-deployment behavior, API endpoints, replay assumptions, and
+fixture-based verification commands. `/journal` now shows paper evidence with
+sample sizes and warnings. Run `npm run test:evidence`, `npm run outcomes`, or
+`npm run backtest:swing`; all evidence excludes slippage and fees.
+
+## Private accounts and personal paper journal
+
+See [PERSONAL_JOURNAL.md](PERSONAL_JOURNAL.md) for the new required migration, admin bootstrap, private-mode access changes, personal sizing/journal, verified Telegram links, worker configuration, and test limits. Private mode now defaults to enabled; account data requires Supabase. Phase 3 private filtering, digests and controls are implemented; see PHASE3.md for activation and verification.
+
+## Phase 5 UI
+
+Symbol charts with recorded-signal markers, saved account alert preferences, and detailed evidence statistics are implemented in vanilla JavaScript. See [PHASE5.md](PHASE5.md) for routes, the additive preference migration, browser tests and limitations. Alert delivery filtering is implemented by Phase 3 and requires its database migration and worker setup.
+
+## Planned Phase 8 — Official Market Data Migration (Upstox)
+
+[Phase 8 proposal](PHASE8_UPSTOX.md) incorporates the reviewed Upstox migration
+requirements: feasibility/field parity, REST data foundation, internal screeners,
+streaming, and staged cutover/rollback. Status: **proposed, not implemented**.
+
+## Render keepalive
+
+Scanner heartbeats are gated to weekdays 08:55–15:45 IST excluding configured NSE
+holidays. `KEEPALIVE_WINDOW` and `KEEPALIVE_INTERVAL_MS` override the hours/interval.
+See [KEEPALIVE.md](KEEPALIVE.md) for external ping setup and persistence verification.
+
+## Architecture snapshot
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the current system diagram, deployment
+shapes, storage boundaries and implemented-versus-planned phase status.
+
+For the complete planned system after remaining phases, see
+[FUTURE_ARCHITECTURE.md](FUTURE_ARCHITECTURE.md). It is a target design, not current deployment status.
+
+## Upstox implementation — guarded rollout
+
+A selectable Upstox REST/feed adapter, persistent cache, lease guard and push-outbox
+improvements are implemented on the migration branch. **Live validation and screening
+parity are incomplete; Upstox is not the default and has not been deployed.** See
+[UPSTOX_MIGRATION.md](UPSTOX_MIGRATION.md) for required metadata, migrations,
+verification commands, exact limitations and cutover/rollback gates.
+
+## Phase 3 private alerts
+
+Preference enforcement, durable daily-capped/deduped queues, digests, private bot controls, per-chat cooldown/retry and admin outage notifications are implemented. See [PHASE3.md](PHASE3.md) for the migration, worker placement, controls and live-verification limits. Live Telegram/Supabase checks remain unverified.
+
+## Start here: complete setup checklist
+
+[SETUP_STEP_BY_STEP.md](SETUP_STEP_BY_STEP.md) lists the websites to open, SQL files
+to run in order, local/Render/scanner environment settings, commands, Telegram and
+cron-job.org setup, user acceptance checks, and the guarded Upstox migration steps.

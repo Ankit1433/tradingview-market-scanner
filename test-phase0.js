@@ -1,0 +1,56 @@
+process.env.SWING_DATA_DIR = '/tmp/ankquant-phase0';
+const assert = require('node:assert/strict');
+const { isBarComplete, barDateKey } = require('./src/services/dailyBars');
+const { isScanDue, calendarInfo, isTradingDay } = require('./src/services/tradingCalendar');
+const { getMarketStatus } = require('./src/services/marketStatus');
+const { loadDaily, getIndexReturn } = require('./src/indicators/swingSignals');
+const { completedSessionBars } = require('./src/jobs/swingBackfill');
+const { closeClient } = require('./src/services/tvHistory');
+const at = (date, time) => new Date(`${date}T${time}:00+05:30`);
+const bar = date => ({ time: at(date, '09:15').getTime()/1000, open:100, high:102, low:98, close:100, volume:1000 });
+let checks = 0;
+function check(name, fn) { fn(); checks++; console.log(`  ✓ ${name}`); }
+async function main() {
+ for (const time of ['08:00','12:00','15:30','15:44']) check(`today incomplete at ${time}`, () => assert.equal(isBarComplete(bar('2026-10-28'), at('2026-10-28',time)),false));
+ for (const time of ['15:45','16:00']) check(`today complete at ${time}`, () => assert.equal(isBarComplete(bar('2026-10-28'), at('2026-10-28',time)),true));
+ check('weekend retains Friday but rejects weekend bars',()=>{assert(isBarComplete(bar('2026-10-23'),at('2026-10-25','08:00')));assert(!isBarComplete(bar('2026-10-25'),at('2026-10-25','18:00')));});
+ check('holiday retains prior session',()=>{assert(isBarComplete(bar('2026-10-01'),at('2026-10-02','08:00')));assert(!isBarComplete(bar('2026-10-02'),at('2026-10-02','18:00')));});
+ check('future and malformed timestamps rejected',()=>{assert(!isBarComplete(bar('2026-10-29'),at('2026-10-28','18:00')));assert(!isBarComplete({time:NaN}));assert(!isBarComplete({}));});
+ check('date conversion uses IST across UTC midnight',()=>assert.equal(barDateKey({time:Date.parse('2026-10-27T20:00:00Z')/1000}),'2026-10-28'));
+ check('scheduler shares calendar and cutoff',()=>{for(const date of ['2026-10-02','2026-10-25']) assert(!isScanDue(at(date,'18:00'),{h:15,m:45},null));assert(!isScanDue(at('2026-10-28','15:44'),{h:15,m:45},null));assert(isScanDue(at('2026-10-28','15:45'),{h:15,m:45},null));assert(!isScanDue(at('2026-10-28','16:00'),{h:15,m:45},'2026-10-28'));});
+ check('status and scheduler agree on holiday',()=>assert.equal(getMarketStatus(at('2026-10-02','12:00')).phase,'holiday'));
+ check('missing calendar year warns and reports stale',()=>{let n=0; const old=console.warn;console.warn=()=>n++;try{assert(calendarInfo('2031-01-01').stale);calendarInfo('2031-01-02');assert.equal(n,1);}finally{console.warn=old;}});
+ const bars=[];for(let i=0;i<300;i++){const d=new Date(Date.UTC(2026,0,1+i)).toISOString().slice(0,10);if(isTradingDay(d)) bars.push(bar(d));}bars.push({...bar('2026-10-28'),close:10000});
+ const now=at('2026-10-28','12:00');const fetchHistory=async()=>bars.map(b=>({...b}));
+ const loaded=await loadDaily('TEST',{now,fetchHistory});const index=await getIndexReturn('NIFTY',{now,fetchHistory});
+ check('stock and index exclude same partial spike',()=>{assert.equal(loaded.at(-1).close,100);assert.equal(index,0);});
+ const post=await loadDaily('TEST',{now:at('2026-10-28','15:45'),fetchHistory});check('post-close stock includes final bar',()=>assert.equal(post.at(-1).close,10000));
+ check('backfill uses 15:45 boundary',()=>{assert.equal(completedSessionBars(bars,now,1)[0].dateKey,'2026-10-27');assert.equal(completedSessionBars(bars,at('2026-10-28','15:45'),1)[0].dateKey,'2026-10-28');});
+ const state=require('./src/state/swingState');const pm=require('./src/trading/swingPositionManager');state.getState().openPositions={};pm.openPosition('TEST',100,2,95,{dateKey:'2026-10-26'});pm.managePosition('TEST',101,2,{dateKey:'2026-10-27'});pm.managePosition('TEST',101,2,{dateKey:'2026-10-27'});check('repeated completed bar does not age paper position',()=>assert.equal(state.getState().openPositions.TEST.barsHeld,1));
+ const {spawnSync}=require('node:child_process');check('configurable cutoff and schedule validate',()=>{const valid=spawnSync(process.execPath,['-e',"const t=require('./src/config/swingTiming');if(t.scan.h!==16)process.exit(1)"],{env:{...process.env,SWING_SCAN_TIME:'16:00',SWING_BAR_COMPLETE_TIME:'15:50'}});assert.equal(valid.status,0);const invalid=spawnSync(process.execPath,['-e',"require('./src/config/swingTiming')"],{env:{...process.env,SWING_SCAN_TIME:'09:15'}});assert.notEqual(invalid.status,0);});
+ // Exercise actual route and orchestration wiring with controlled market data.
+ const signalsModule=require('./src/indicators/swingSignals');
+ const original={...signalsModule};let indexClock,stockClock;
+ signalsModule.getIndexReturn=async(symbol,opts)=>{indexClock=opts.now;return 0;};
+ signalsModule.evaluateSwingSignals=async(symbol,index,opts)=>{stockClock=opts.now;return {symbol,evaluatedBarTime:123};};
+ delete require.cache[require.resolve('./src/routes/swing')];
+ const router=require('./src/routes/swing');
+ const route=router.stack.find(layer=>layer.route?.path==='/analyze/:symbol');let response;
+ await route.route.stack[0].handle({params:{symbol:'test'}},{json:value=>{response=value;},status:()=>{throw new Error('analysis failed');}});
+ check('analyze route shares one clock between index and stock',()=>{assert(indexClock instanceof Date);assert.equal(indexClock,stockClock);assert.equal(response.symbol,'TEST');});
+ signalsModule.loadDaily=async(symbol,opts)=>loadDaily(symbol,{...opts,fetchHistory});
+ delete require.cache[require.resolve('./src/jobs/swingLoop')];
+ const loop=require('./src/jobs/swingLoop');
+ state.getState().openPositions={};pm.openPosition('TEST',100,2,95,{dateKey:'2026-10-26'});
+ await loop.manageOpenPositions(now);
+ check('position management ignores partial target spike',()=>{const pos=state.getState().openPositions.TEST;assert.equal(pos.partialBooked,false);assert.equal(pos.lastManagedDate,'2026-10-27');});
+ Object.assign(signalsModule,original);
+ const telegram=require('./src/services/telegram');const oldCommand=telegram.processTelegramCommands;telegram.processTelegramCommands=async()=>{};
+ delete require.cache[require.resolve('./src/jobs/scanLoop')];
+ const intraday=require('./src/jobs/scanLoop');
+ const delay=await intraday.runCycle(at('2026-10-02','12:00'));
+ check('intraday scheduler returns holiday sleep before fetching',()=>assert.equal(delay,300000));
+ telegram.processTelegramCommands=oldCommand;
+ console.log(`Phase 0: ${checks} checks passed`);
+}
+main().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>closeClient());

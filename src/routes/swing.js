@@ -149,10 +149,9 @@ router.get("/candidates", async (req, res) => {
 router.get("/analyze/:symbol", async (req, res) => {
   try {
     const symbol = req.params.symbol.toUpperCase();
-    const indexReturn = await getIndexReturn();
-    const result = await evaluateSwingSignals(symbol, indexReturn, {
-      dropPartialBar: getMarketStatus().isOpen,
-    });
+    const now = new Date();
+    const indexReturn = await getIndexReturn('NIFTY', { now });
+    const result = await evaluateSwingSignals(symbol, indexReturn, { now });
     if (!result) {
       return res.json({
         symbol,

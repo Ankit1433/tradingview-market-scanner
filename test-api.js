@@ -1,3 +1,4 @@
+process.env.PRIVATE_MODE = 'false';
 /**
  * End-to-end API verification. Boots a real server on a throwaway port,
  * exercises every endpoint, and checks auth/redaction/SSE behave as intended.

@@ -8,8 +8,12 @@ services:
     region: singapore
     buildCommand: npm ci --omit=dev
     startCommand: npm start
-    healthCheckPath: /
+    healthCheckPath: /healthz
     envVars:
+      - key: PRIVATE_MODE
+        value: "true"
+      - key: APP_ORIGIN
+        sync: false
       - key: NODE_ENV
         value: production
       - key: INGEST_MODE

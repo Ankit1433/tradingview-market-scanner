@@ -1,3 +1,4 @@
+process.env.PRIVATE_MODE = 'false';
 process.env.SWING_DATA_DIR = '/tmp/signal-consistency-data';
 process.env.API_KEY = 'test-key-12345';
 process.env.PUBLIC_MODE = 'true';

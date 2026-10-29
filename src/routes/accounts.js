@@ -1,0 +1,28 @@
+const express=require('express');
+const {hash,token,passwordHash,verify,cookie,setCookie}=require('../middleware/accounts');
+const {requireKey}=require('../middleware/auth');
+const personal=require('../trading/personalJournal');
+function createRoutes(store,auth){const router=express.Router();
+ const safe=fn=>(req,res)=>Promise.resolve(fn(req,res)).catch(()=>res.status(503).json({error:'Account operation unavailable'}));
+ function credentials(body){if(typeof body.email!=='string'||! /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email)||body.email.length>254||typeof body.password!=='string'||body.password.length<12||body.password.length>128)return null;return {email:body.email.trim().toLowerCase(),password:body.password};}
+ router.post('/bootstrap',requireKey,auth.limited,safe(async(req,res)=>{const c=credentials(req.body||{});if(!c)return res.status(400).json({error:'Valid email and 12–128 character password required'});await store.bootstrap(c.email,await passwordHash(c.password));res.status(201).json({created:true});}));
+ router.post('/register',auth.sameOrigin,auth.limited,safe(async(req,res)=>{const c=credentials(req.body||{});if(!c||typeof req.body.code!=='string'||! /^[a-f0-9]{64}$/.test(req.body.code))return res.status(400).json({error:'Valid invite, email and 12–128 character password required'});
+ try{await store.register(c.email,await passwordHash(c.password),hash(req.body.code));res.status(201).json({created:true});}catch(_){res.status(400).json({error:'Registration failed. Check invite and account details.'});}}));
+ router.post('/login',auth.sameOrigin,auth.limited,safe(async(req,res)=>{const c=credentials(req.body||{});if(!c)return res.status(401).json({error:'Invalid email or password'});const user=await store.userByEmail(c.email);if(!await verify(c.password,user?.password_hash)||!user)return res.status(401).json({error:'Invalid email or password'});
+ const value=token();await store.addSession({token_hash:hash(value),user_id:user.id,expires_at:new Date(Date.now()+7*86400000).toISOString()});setCookie(res,value);res.json({ok:true});}));
+ router.use(auth.identify,auth.requireUser);
+ router.get('/me',(req,res)=>res.json({id:req.user.id,email:req.user.email,role:req.user.role,settings:req.user.settings,telegramLinked:Boolean(req.user.telegram_chat_id),alertsPaused:Boolean(req.user.alerts_paused),alertsMutedUntil:req.user.alerts_muted_until||null}));
+ router.post('/logout',auth.sameOrigin,safe(async(req,res)=>{await store.removeSession(hash(cookie(req)));setCookie(res,'');res.json({ok:true});}));
+ router.post('/invites',auth.sameOrigin,auth.admin,safe(async(req,res)=>{const code=token();await store.invite({code_hash:hash(code),created_by:req.user.id,expires_at:new Date(Date.now()+86400000).toISOString()});res.status(201).json({code,expiresInHours:24});}));
+ router.get('/preferences',(req,res)=>res.json({preferences:{...require('../config/alertPreferences').defaults,...req.user.alert_preferences},deliveryActive:process.env.SIGNAL_ALERTS_ENABLED!=='false',deliveryStatus:'Requires linked Telegram and running personal worker',timeZone:'Asia/Kolkata'}));
+ router.post('/preferences',auth.sameOrigin,safe(async(req,res)=>{let value;try{value=require('../config/alertPreferences').validate(req.body);}catch(error){return res.status(400).json({error:error.message});}await store.preferences(req.user.id,value);res.json({preferences:value,deliveryActive:process.env.SIGNAL_ALERTS_ENABLED!=='false',deliveryStatus:'Requires linked Telegram and running personal worker',timeZone:'Asia/Kolkata'});}));
+ router.post('/settings',auth.sameOrigin,safe(async(req,res)=>{let value;try{value=personal.settings(req.body||{});}catch(e){return res.status(400).json({error:e.message});}await store.settings(req.user.id,value);res.json(value);}));
+ router.post('/telegram/link',auth.sameOrigin,safe(async(req,res)=>{const bot=process.env.TELEGRAM_BOT_USERNAME;if(!bot||! /^[A-Za-z0-9_]+$/.test(bot))return res.status(503).json({error:'Telegram bot username not configured'});const value=token();await store.link(req.user.id,hash(value));res.json({url:`https://t.me/${bot}?start=${value}`,expiresInMinutes:10});}));
+ router.post('/telegram/unlink',auth.sameOrigin,safe(async(req,res)=>{await store.unlink(req.user.id);res.json({ok:true});}));
+ router.get('/journal',safe(async(req,res)=>{const trades=await store.trades(req.user.id);res.json({trades,stats:personal.stats(trades),limit:1000});}));
+ router.post('/journal',auth.sameOrigin,safe(async(req,res)=>{if(typeof req.body.eventKey!=='string'||! /^[a-f0-9]{64}$/.test(req.body.eventKey))return res.status(400).json({error:'A valid signal event key is required'});const signal=await store.signal(req.body.eventKey);if(!signal)return res.status(404).json({error:'Signal not in the account database'});
+ let plan;try{plan=personal.plan(req.body,req.user.settings,await store.trades(req.user.id));}catch(e){return res.status(400).json({error:e.message});}
+ try{const rows=await store.addTrade({...plan,event_key:req.body.eventKey,symbol:signal.symbol,mode:signal.mode,user_id:req.user.id});res.status(201).json({trade:rows[0],label:'Personal paper trade — no order placed'});}catch(_){res.status(409).json({error:'Could not save; this signal may already be in your journal'});}}));
+ router.post('/journal/:id/close',auth.sameOrigin,safe(async(req,res)=>{if(! /^[a-f0-9-]{36}$/i.test(req.params.id)||!personal.positive(req.body.exit))return res.status(400).json({error:'Valid trade ID and positive exit required'});const rows=await store.closeTrade(req.user.id,req.params.id,req.body.exit);if(!rows.length)return res.status(404).json({error:'Open trade not found'});res.json({trade:rows[0]});}));
+ return router;}
+module.exports={createRoutes};

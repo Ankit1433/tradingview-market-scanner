@@ -15,6 +15,10 @@ services:
     ports:
       - "${PORT:-4000}:4000"
     environment:
+      PRIVATE_MODE: "${PRIVATE_MODE:-true}"
+      APP_ORIGIN: "${APP_ORIGIN:-http://localhost:4000}"
+      SUPABASE_URL: "${SUPABASE_URL:-}"
+      SUPABASE_SECRET_KEY: "${SUPABASE_SECRET_KEY:-}"
       INGEST_MODE: "true"
       PUBLIC_MODE: "true"
       API_KEY: "${API_KEY:?set API_KEY in .env}"
@@ -33,8 +37,14 @@ services:
     ports:
       - "${PORT:-4000}:4000"
     environment:
+      PRIVATE_MODE: "${PRIVATE_MODE:-true}"
+      APP_ORIGIN: "${APP_ORIGIN:-http://localhost:4000}"
+      SUPABASE_URL: "${SUPABASE_URL:-}"
+      SUPABASE_SECRET_KEY: "${SUPABASE_SECRET_KEY:-}"
       API_KEY: "${API_KEY:?set API_KEY in .env}"
       TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN:-}"
+      TELEGRAM_BOT_USERNAME: "${TELEGRAM_BOT_USERNAME:-}"
+      ENABLE_PERSONAL_WORKER: "${ENABLE_PERSONAL_WORKER:-false}"
       TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID:-}"
       ENABLE_INTRADAY: "${ENABLE_INTRADAY:-true}"
       ENABLE_SWING: "${ENABLE_SWING:-true}"

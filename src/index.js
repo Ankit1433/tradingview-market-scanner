@@ -12,6 +12,13 @@ const { closeAll } = require('./services/eventStream');
 const { PUBLIC_MODE, API_KEY_CONFIGURED } = require('./middleware/auth');
 const { start: __start, drain } = require('./services/pushClient');
 
+const personalLoop = require('./jobs/personalLoop');
+const outcomeLoop = require('./jobs/outcomeLoop');
+const outcomeStore = require('./state/outcomeStore');
+
+const market = require('./marketData');
+let marketLease, marketFeed;
+
 const PORT = process.env.PORT || 4000;
 
 // Both loops are opt-out rather than opt-in, but independently - running only
@@ -61,6 +68,26 @@ async function initializeStorageAndLoops() {
     await paperTradeStore.hydrateIntradayPositions();
   }
 
+  if (market.name === 'upstox') {
+    if (!process.env.UPSTOX_ACCESS_TOKEN) throw new Error('UPSTOX_TOKEN_MISSING');
+    if ((ENABLE_INTRADAY || ENABLE_SWING) && (process.env.UPSTOX_SCREENING_APPROVED !== 'true' || !process.env.UPSTOX_UNIVERSE_FILE)) throw new Error('UPSTOX_SCREENING_PARITY_APPROVAL_AND_METADATA_REQUIRED');
+    if (ENABLE_INTRADAY || ENABLE_SWING) {
+      if (!supabaseStore.status().connected) throw new Error('UPSTOX_WORKERS_REQUIRE_DATABASE_LEASE');
+      marketLease = await require('./marketData/ownership').acquire({ onLost: () => { console.error('[market] ownership lost; stopping workers'); shutdown(); } });
+      if (process.env.UPSTOX_STREAM_ENABLED === 'true') {
+        marketFeed = new (require('./marketData/feed').Feed)({ provider: market.provider() });
+        const names=(process.env.UPSTOX_STREAM_SYMBOLS || 'NIFTY').split(',').map(s=>s.trim()).filter(Boolean);
+        marketFeed.subscribe(await Promise.all(names.map(async s=>(await market.provider().instrument(s)).instrument_key)));
+        marketFeed.on('reconnected',()=>{ market.provider().memory.clear(); });
+        marketFeed.on('data',()=>{});
+        await marketFeed.start();
+        market.provider().feed = marketFeed;
+      }
+    }
+  }
+  await outcomeStore.hydrate();
+  if (!INGEST_MODE && process.env.ENABLE_OUTCOMES !== 'false' && (ENABLE_INTRADAY || ENABLE_SWING)) outcomeLoop.start();
+
   if (ENABLE_INTRADAY) {
     start().catch((e) => {
       console.error('Failed to start intraday scan loop:', e);
@@ -79,7 +106,8 @@ async function initializeStorageAndLoops() {
     console.log('Swing loop disabled (ENABLE_SWING=false)');
   }
 
-  if (!INGEST_MODE) __start();
+  if (!INGEST_MODE) { await require('./services/pushClient').hydrateOutbox(); __start(); }
+  if (process.env.PRIVATE_MODE !== 'false' && process.env.ENABLE_PERSONAL_WORKER === 'true') await personalLoop.start();
 }
 
 initializeStorageAndLoops().catch((e) => {
@@ -88,13 +116,18 @@ initializeStorageAndLoops().catch((e) => {
 
 async function shutdown() {
   console.log('\nShutting down...');
+  const deadline=setTimeout(()=>process.exit(1),10000);deadline.unref();
+  marketFeed?.stop();
   stop();
   _stop();
+  await personalLoop.stop();
+  await outcomeLoop.stop();
   // Best-effort flush of anything still queued for the remote API.
   await drain().catch(() => {});
   await supabaseStore.flush().catch(() => {});
   closeAll();
-  closeClient();
+  await closeClient();
+  await marketLease?.stop();
   server.close(() => process.exit(0));
   // force-exit if something hangs
   setTimeout(() => process.exit(0), 3000).unref();

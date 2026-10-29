@@ -7,8 +7,7 @@
 const IST_TZ = 'Asia/Kolkata';
 
 /** Current moment, plus its IST wall-clock time and weekday. */
-function nowIST() {
-  const now = new Date();
+function nowIST(now = new Date()) {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: IST_TZ,
     hour: 'numeric',

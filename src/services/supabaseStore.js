@@ -237,7 +237,21 @@ function status() {
   };
 }
 
+async function upsertOutcome(row) {
+  await request('post','signal_outcomes',{params:{on_conflict:'event_key,calculation_version'},data:{event_key:row.eventKey,calculation_version:row.version,payload:row,updated_at:row.evaluatedAt},headers:{Prefer:'resolution=merge-duplicates,return=minimal'}});
+}
+async function loadOutcomes() {
+ const rows=[];for(let offset=0;;offset+=1000){const res=await request('get','signal_outcomes',{params:{select:'payload',order:'event_key.asc,calculation_version.asc',limit:1000,offset}});rows.push(...res.data.map(r=>r.payload));if(res.data.length<1000)break;}return rows;
+}
+async function* iterateSignalEvents() {
+ let cursor=null;
+ while(true){const params={select:'*',order:'event_key.asc',limit:1000};if(cursor)params.event_key=`gt.${cursor}`;
+ const res=await request('get','signal_events',{params});for(const row of res.data)yield row;
+ if(res.data.length<1000)break;cursor=res.data.at(-1).event_key;}
+}
 module.exports = {
+  request,
+  upsertOutcome, loadOutcomes, iterateSignalEvents,
   connect,
   countSignalEvents,
   loadSignalEvents,

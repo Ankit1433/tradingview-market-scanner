@@ -22,12 +22,16 @@
 const PUSH_URL = process.env.PUSH_URL || null;
 const PUSH_KEY = process.env.PUSH_API_KEY || process.env.API_KEY || null;
 const FLUSH_INTERVAL_MS = Number(process.env.PUSH_FLUSH_MS || 5000);
-const HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000;
+const { createHeartbeat, intervalMs: HEARTBEAT_INTERVAL_MS } = require('../config/keepalive');
 const MAX_QUEUE = 500;
 const BATCH_SIZE = 50;
 const REQUEST_TIMEOUT_MS = 10000;
 
-let queue = [];
+const outbox = require('./pushOutbox');
+let queue = PUSH_URL ? outbox.load() : [];
+let inFlightBatch = [];
+let flushBusy = false;
+const persist = () => outbox.save(inFlightBatch.concat(queue));
 let flushTimer = null;
 let heartbeatTimer = null;
 let consecutiveFailures = 0;
@@ -61,20 +65,18 @@ async function request(path, body) {
 function pushSignal(record) {
   if (!enabled) return;
 
-  if (queue.length >= MAX_QUEUE) {
-    queue.shift();
-    stats.dropped += 1;
-    if (stats.dropped === 1 || stats.dropped % 100 === 0) {
-      console.warn(`[push] queue full — dropped ${stats.dropped} signal(s). Remote may be unreachable.`);
-    }
-  }
+  if (inFlightBatch.concat(queue).some(row => outbox.identity(row) === outbox.identity(record))) return;
+
   queue.push(record);
+  persist();
 }
 
 async function flush() {
-  if (!enabled || queue.length === 0) return;
+  if (!enabled || queue.length === 0 || flushBusy) return;
+  flushBusy = true;
 
   const batch = queue.splice(0, BATCH_SIZE);
+  inFlightBatch = batch;
 
   try {
     const res = await request('/api/ingest/signals', { signals: batch });
@@ -93,6 +95,7 @@ async function flush() {
       // spin forever. Disable and say so loudly.
       console.error(`[push] auth rejected (${res.status}) — disabling push. Check PUSH_API_KEY matches the remote API_KEY.`);
       enabled = false;
+      queue = outbox.merge(batch.concat(queue));
       stop();
       return;
     }
@@ -103,11 +106,15 @@ async function flush() {
     consecutiveFailures += 1;
 
     // Put the batch back at the front so ordering survives a transient outage.
-    queue = batch.concat(queue).slice(0, MAX_QUEUE);
+    queue = outbox.merge(batch.concat(queue));
 
     if (consecutiveFailures === 1 || consecutiveFailures % 12 === 0) {
-      console.warn(`[push] flush failed (${consecutiveFailures} consecutive): ${e.message}`);
+      console.warn(`[push] flush failed (${consecutiveFailures} consecutive)`);
     }
+  } finally {
+    inFlightBatch = [];
+    flushBusy = false;
+    persist();
   }
 }
 
@@ -162,15 +169,10 @@ async function pushPositions(positions, totalRealizedPnl, counters, closedTrades
   }
 }
 
-async function heartbeat() {
-  if (!enabled) return;
-  try {
-    await request('/api/ingest/heartbeat', {});
-  } catch (e) {
-    // A failed heartbeat is itself the signal that something is wrong; the
-    // remote's /api/ingest/status will show it as stale. Nothing to do here.
-  }
-}
+const heartbeat = createHeartbeat({
+  enabled: () => enabled,
+  send: () => request('/api/ingest/heartbeat', {}),
+});
 
 function start() {
   if (!PUSH_URL) return;
@@ -186,7 +188,8 @@ function start() {
 
   enabled = true;
   flushTimer = setInterval(() => { flush().catch(() => {}); }, FLUSH_INTERVAL_MS);
-  heartbeatTimer = setInterval(() => { heartbeat().catch(() => {}); }, HEARTBEAT_INTERVAL_MS);
+  // Check locally each second; only eligible, interval-spaced checks make HTTP requests.
+  heartbeatTimer = setInterval(() => { heartbeat().catch(() => {}); }, Math.min(1000, HEARTBEAT_INTERVAL_MS));
   flushTimer.unref?.();
   heartbeatTimer.unref?.();
 
@@ -215,4 +218,9 @@ function getStats() {
   return { ...stats, queued: queue.length, enabled, consecutiveFailures };
 }
 
-module.exports = { start, stop, drain, pushSignal, pushPositions, pushUniverse, isEnabled, getStats };
+async function pushOutcomes(outcomes) {
+ if(!PUSH_URL || !PUSH_KEY)return false;
+ try {const res=await request('/api/ingest/outcomes',{outcomes});return res.ok;}catch(_){return false;}
+}
+async function hydrateOutbox() { queue = await outbox.hydrate(queue); if (queue.length) persist(); }
+module.exports = { hydrateOutbox, pushOutcomes, start, stop, drain, pushSignal, pushPositions, pushUniverse, isEnabled, getStats };

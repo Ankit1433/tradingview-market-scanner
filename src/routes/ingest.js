@@ -56,7 +56,7 @@ function validateSignal(s) {
  * can produce a dozen signals at once, and a round-trip per signal from a
  * home connection to a cloud host adds up.
  */
-router.post('/signals', requireKey, (req, res) => {
+router.post('/signals', requireKey, async (req, res) => {
   const body = req.body || {};
 
   // Disambiguation matters here: a single signal carries `signals` as an array
@@ -94,7 +94,19 @@ router.post('/signals', requireKey, (req, res) => {
     }
 
     try {
+      const validKey = typeof sig.eventKey === 'string' && /^[a-f0-9]{64}$/.test(sig.eventKey);
+      if (validKey) {
+        let exists = journal.hasEvent(sig);
+        const db = require('../services/supabaseStore');
+        if (!exists && db.status().connected) {
+          const response = await db.request('get','signal_events',{params:{select:'event_key',event_key:`eq.${sig.eventKey}`,limit:1}});
+          exists = response.data.length > 0;
+        }
+        if (exists) { accepted.push(sig.symbol); continue; }
+      }
       const stored = journal.record({
+        ...(typeof sig.ts === 'string' && Number.isFinite(Date.parse(sig.ts)) ? { ts: sig.ts } : {}),
+        ...(typeof sig.eventKey === 'string' && /^[a-f0-9]{64}$/.test(sig.eventKey) ? { eventKey: sig.eventKey } : {}),
         mode: sig.mode,
         symbol: sig.symbol.toUpperCase(),
         signals: sig.signals,
@@ -125,6 +137,18 @@ router.post('/signals', requireKey, (req, res) => {
  * than merging: the scanner is the single source of truth for what's open,
  * and a merge would leave a position visible here after it closed there.
  */
+router.post('/outcomes', requireKey, (req,res)=>{
+ const rows=req.body?.outcomes;
+ const {VERSION,LABEL}=require('../evidence/outcomes');
+ if(!Array.isArray(rows)||!rows.length||rows.length>50)return res.status(400).json({error:'Supply 1–50 outcomes'});
+ for(const r of rows){if(!r || typeof r.eventKey!=='string'||! /^[a-f0-9]{64}$/.test(r.eventKey)||r.version!==VERSION||r.label!==LABEL
+ ||!VALID_MODES.includes(r.mode)||!['complete','pending','unavailable'].includes(r.status)||!Array.isArray(r.signals)||r.signals.some(s=>typeof s!=='string'||s.length>64)
+ ||typeof r.symbol!=='string'||r.symbol.length>32||typeof r.sector!=='string'||r.sector.length>120||typeof r.confluence!=='boolean'
+ ||!Number.isFinite(Date.parse(r.evaluatedAt))||!r.horizons||typeof r.horizons!=='object'||Array.isArray(r.horizons)
+ ||(r.resultR!==null&&!Number.isFinite(r.resultR)))return res.status(400).json({error:'Invalid outcome'});}
+ try{const store=require('../state/outcomeStore');for(const r of rows)store.save(r);res.json({accepted:rows.length});}catch(_){res.status(500).json({error:'Outcome persistence failed'});}
+});
+
 router.post('/positions', requireKey, (req, res) => {
   const { positions, totalRealizedPnl, counters, closedTrades } = req.body || {};
 

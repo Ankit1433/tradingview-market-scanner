@@ -49,6 +49,9 @@ const INTERVAL = {
  * the Python code treated `df is None`.
  */
 function getHist(symbol, exchange, interval, nBars, { timeoutMs = 12000 } = {}) {
+  const market = require('../marketData');
+  if (market.name === 'upstox') return market.provider().history(symbol, interval, nBars);
+
   return new Promise((resolve) => {
     let settled = false;
     const tvClient = getClient();

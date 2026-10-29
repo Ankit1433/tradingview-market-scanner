@@ -134,26 +134,31 @@
       @media (max-width: 560px) { .shell { width: min(100% - 22px, 1480px); padding-top: 10px; } .brand-caption { display: none; } .nav { margin-left: auto; } .nav a { padding: 7px 8px; font-size: 12px; } .intro { align-items: flex-start; flex-wrap: wrap; margin-top: 24px; } .intro p { font-size: 12px; } .actions { width: 100%; } .actions .button { flex: 1; min-height: 36px; padding: 0 9px; font-size: 11px; } .metrics { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; } .metric { min-height: 77px; padding: 11px; } .metric-value { font-size: 21px; } .filters { grid-template-columns: 1fr 1fr; } .filters .symbol-filter { grid-column: 1 / -1; } .filters .toggle { grid-column: 1 / -1; } .panel-head { padding: 13px; } td, th { padding-left: 9px; padding-right: 9px; } }
       @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; } }
     </style>
+    <link rel="stylesheet" href="/assets/workspace.css" />
+    <script src="/assets/workspace.js" defer></script>
   </head>
   <body>
+    <a class="skip-link" href="#main-content">Skip to workspace</a>
     <div class="shell">
       <header class="topbar">
         <a class="brand" href="/" aria-label="AnkQuant home"><div class="brand-mark">AQ</div><div><div class="brand-name">AnkQuant</div><div class="brand-caption">NSE · Research workspace</div></div></a>
         <nav class="nav" aria-label="Main navigation">
           <a href="/">Scanner</a>
           <a class="active" href="/journal" aria-current="page">Journal</a>
-          <a href="/demo">Signal tape</a>
+          <a href="/symbol">Symbol</a><a href="/alerts">Alerts</a><a href="/stats">Stats</a><a href="/personal">My paper journal</a>
         </nav>
         <div class="feed-status"><i class="dot" id="feed-dot"></i><span id="feed-status">Connecting live updates</span></div>
+        <button class="motion-toggle" type="button" aria-label="Pause decorative animations" aria-pressed="false">Motion on</button>
       </header>
 
-      <main>
+      <main id="main-content" tabindex="-1">
+        <div class="paper-banner"><span class="paper-badge">PAPER RESEARCH</span><span>Informational setups · No orders placed</span></div>
         <section class="intro">
-          <div><div class="eyebrow">Signal history</div><h1>Signal journal</h1><p>Search recorded setups, inspect their context, and export the filtered rows.</p></div>
+          <div><div class="eyebrow">ANKQUANT / RESEARCH LIBRARY</div><h1>Signal journal</h1><p>Search recorded setups, inspect their context, and export the filtered rows.</p></div>
           <div class="actions"><button class="button" id="clear-filters" type="button">Clear filters</button><button class="button" id="refresh" type="button">↻ Refresh</button><button class="button primary" id="export" type="button" disabled>↓ Export CSV</button></div>
         </section>
 
-        <section class="metrics" aria-label="Journal summary">
+<section class="metrics" aria-label="Journal summary">
           <article class="metric"><div class="metric-label">Matching records</div><div class="metric-value" id="metric-total">—</div><div class="metric-note">From the latest journal window</div></article>
           <article class="metric"><div class="metric-label">Confluence</div><div class="metric-value" id="metric-confluence">—</div><div class="metric-note">Gate-cleared records in view</div></article>
           <article class="metric"><div class="metric-label">Intraday</div><div class="metric-value" id="metric-intraday">—</div><div class="metric-note">Records in current view</div></article>
@@ -182,13 +187,25 @@
 
           <aside class="panel detail" aria-live="polite">
             <div class="panel-head"><h2 class="panel-title">Signal details</h2><span class="panel-meta" id="detail-meta">Select a row</span></div>
-            <div id="detail"><div class="detail-empty"><div><b>Select a signal</b>Choose a journal row to inspect its recorded setup and market context.</div></div></div>
+            <a id="take-signal" class="button primary" style="margin:16px;display:none" href="/personal">Mark as taken · Paper</a><div id="detail"><div class="detail-empty"><div><b>Select a signal</b>Choose a journal row to inspect its recorded setup and market context.</div></div></div>
           </aside>
         </section>
+        <section class="panel evidence-panel" aria-labelledby="evidence-title">
+<h2 id="evidence-title">Paper evidence — no slippage or fees</h2>
+<p>Forward signal outcomes, separate from personal trades. Each label group may contain the same signal.</p>
+<label for="evidence-group">Group by</label>
+<select id="evidence-group"><option value="byMode">Mode</option><option value="byLabel">Signal label</option><option value="byConfluence">Confluence</option><option value="bySector">Sector</option></select>
+<div id="evidence-status" role="status">Loading evidence…</div>
+<div class="table-wrap"><table><thead><tr><th>Group</th><th>Eligible</th><th>Completed</th><th>Result sample n</th><th>Mean result R</th><th>Sample warning</th></tr></thead><tbody id="evidence-rows"></tbody></table></div>
+</section>
+<script>
+(function(){let data;const status=document.getElementById('evidence-status');function render(){const body=document.getElementById('evidence-rows');body.replaceChildren();for(const [name,row] of Object.entries(data[document.getElementById('evidence-group').value]||{})){const tr=document.createElement('tr');for(const value of [name,row.eligible,row.completed,row.resultR.n,row.resultR.mean===null?'—':row.resultR.mean.toFixed(2),row.resultR.warning||'—']){const td=document.createElement('td');td.textContent=value;tr.appendChild(td);}body.appendChild(tr);}}
+fetch('/api/public/outcomes/stats').then(r=>{if(!r.ok)throw new Error();return r.json();}).then(value=>{data=value;status.textContent=data.overall.eligible?`${data.overall.pending} pending · ${data.overall.unavailable} unavailable. Small samples (n < 30) are not reliable evidence.`:'No eligible signals have been evaluated yet.';render();}).catch(()=>{status.textContent='Paper evidence is unavailable. Refresh to retry.';});document.getElementById('evidence-group').addEventListener('change',()=>{if(data)render();});})();
+</script>
         <p class="source-note">The API returns up to 500 recent matches per request. Filters narrow that window; the journal stores more records than this page loads at once.</p>
         <footer class="site-footer">
           <span>Market research only · Not financial advice.</span>
-          <nav class="footer-links" aria-label="More AnkQuant pages"><a href="/">Scanner</a><a href="/demo">Signal tape</a><a href="/api/docs">API docs</a></nav>
+          <nav class="footer-links" aria-label="More AnkQuant pages"><a href="/">Scanner</a><a href="/symbol">Symbol</a><a href="/alerts">Alerts</a><a href="/stats">Stats</a><a href="/personal">My paper journal</a><a href="/api/docs">API docs</a></nav>
         </footer>
       </main>
     </div>
@@ -265,6 +282,7 @@
               : '<div><b>No signals recorded yet</b>New journal entries will appear here as the scanner runs.</div>';
             $("detail").innerHTML = '<div class="detail-empty"><div><b>No matching signal</b>Adjust the filters to see journal details.</div></div>';
             $("detail-meta").textContent = "No selection";
+            document.getElementById('take-signal').style.display = 'none';
             selectedKey = null;
             activeChartKey = null;
             renderedDetailKey = null;
@@ -291,6 +309,9 @@
             : null;
           if (!selectedSignal) selectedSignal = currentRows[0];
           selectedKey = signalKey(selectedSignal);
+          var take = document.getElementById('take-signal');
+          take.style.display = selectedSignal.eventKey ? 'inline-flex' : 'none';
+          take.href = '/personal?' + new URLSearchParams({eventKey:selectedSignal.eventKey || '', entry:selectedSignal.levels?.entry || '', stop:selectedSignal.levels?.stop || '', target:selectedSignal.levels?.target || ''}).toString();
           if (renderedDetailKey !== selectedKey) renderDetail(selectedSignal);
         }
         function contextItem(label, value) {

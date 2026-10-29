@@ -233,7 +233,7 @@ unauthenticated by design; anything needing a key is server-side only.
 ## Operating notes
 
 - **Update the NSE holiday list every year.** It's hardcoded in
-  `src/services/marketStatus.js` and can't be derived from a rule. The API
+  `src/config/nseCalendar.js` and can't be derived from a rule. The API
   exposes `holidayDataStale` so a consumer can detect when it's out of date.
 - **Rate limiting is in-memory.** Fine for one instance; move to Redis if you
   ever run more than one.
@@ -241,3 +241,12 @@ unauthenticated by design; anything needing a key is server-side only.
   the rest next to it.
 - **Watch `/api/ingest/status`** if you're running split. It's the difference
   between a quiet market and a dead scanner.
+
+## Private accounts and personal paper journal
+
+See [PERSONAL_JOURNAL.md](PERSONAL_JOURNAL.md) for the new required migration, admin bootstrap, private-mode access changes, personal sizing/journal, verified Telegram links, worker configuration, and test limits. Private mode now defaults to enabled; account data requires Supabase. Phase 3 preferences/digests remain unimplemented.
+
+## Scheduled free-tier keepalive
+
+See [KEEPALIVE.md](KEEPALIVE.md) for the IST heartbeat window, eight-minute default,
+cron-job.org schedules/authentication, holiday exclusions and restart-test limits.

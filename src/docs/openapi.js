@@ -67,7 +67,7 @@ const spec = {
           },
           nowIST: { type: 'string' },
           nextOpen: { type: 'object', nullable: true },
-          holidayDataStale: { type: 'boolean', description: 'True if the hardcoded holiday list is for a past year' },
+          holidayDataStale: { type: 'boolean', description: 'True if the current year is absent from the shared NSE calendar' },
         },
       },
       Error: {
@@ -313,5 +313,34 @@ const DOCS_HTML = `<!DOCTYPE html>
   </script>
 </body>
 </html>`;
+
+spec.paths['/api/public/outcomes/stats'] = { get: { summary: 'Paper forward outcomes grouped by mode, label, confluence and sector', description: 'No slippage or fees. Every metric includes n and a warning below 30 observations. Missing coverage is not a zero return.', responses: { 200: { description: 'Versioned evidence aggregates and coverage counts' } } } };
+spec.paths['/api/public/outcomes/{eventKey}'] = { get: { summary: 'Paper outcome for a signal event key', parameters: [{ in: 'path', name: 'eventKey', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'First touch, R result, horizon returns and excursions' }, 404: { description: 'Signal has no evaluated outcome' } } } };
+spec.paths['/api/ingest/outcomes'] = { post: { summary: 'Authenticated idempotent paper outcome ingestion', parameters: [{ in: 'header', name: 'x-api-key', required: true, schema: { type: 'string' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['outcomes'], properties: { outcomes: { type: 'array', minItems: 1, maxItems: 50, items: { type: 'object' } } } } } } }, responses: { 200: { description: 'Accepted' }, 400: { description: 'Invalid outcomes' }, 401: { description: 'Invalid key' }, 503: { description: 'API key not configured' } } } };
+
+// Account payload details and setup are documented in PERSONAL_JOURNAL.md.
+for (const [path,method,summary] of [
+ ['/api/account/bootstrap','post','Create the initial admin (machine API key; one-time)'],
+ ['/api/account/register','post','Redeem a single-use friend invite'],
+ ['/api/account/login','post','Start an httpOnly session'],
+ ['/api/account/logout','post','Revoke the current session'],
+ ['/api/account/me','get','Read own identity and settings'],
+ ['/api/account/invites','post','Create an invite (admin session)'],
+ ['/api/account/settings','post','Save own capital and risk settings'],
+ ['/api/account/telegram/link','post','Create one-time private Telegram link'],
+ ['/api/account/telegram/unlink','post','Remove own Telegram destination'],
+ ['/api/account/journal','get','Read own paper trades and R statistics'],
+ ['/api/account/journal','post','Mark a signal taken with personal sizing'],
+ ['/api/account/journal/{id}/close','post','Record own manual paper exit'],
+]) {
+ spec.paths[path] = spec.paths[path] || {};
+ spec.paths[path][method] = { summary, description: 'Accounts require Supabase. Browser mutations require a matching Origin. Personal reads/writes derive ownership from the session. See PERSONAL_JOURNAL.md for payloads.', responses: {200:{description:'Success'},400:{description:'Invalid input'},401:{description:'Login required'},403:{description:'Forbidden'},503:{description:'Account database unavailable'}} };
+ if(path.includes('{id}'))spec.paths[path][method].parameters=[{in:'path',name:'id',required:true,schema:{type:'string',format:'uuid'}}];
+}
+
+spec.paths['/api/account/preferences'] = {
+ get: { summary: 'Read own saved alert preferences', description: 'Session required. Filtering is implemented; actual delivery requires a linked private chat and enabled worker.', responses: {200:{description:'Preferences, deliveryActive and IST time zone'},401:{description:'Login required'}} },
+ post: { summary: 'Save own validated alert preferences', description: 'Session and matching Origin required. Saves independently of personal capital/risk settings. See PHASE5.md.', responses: {200:{description:'Saved preferences for private signal delivery'},400:{description:'Invalid preferences'},401:{description:'Login required'},403:{description:'Origin rejected'},503:{description:'Database or migration unavailable'}} }
+};
 
 module.exports = { spec, DOCS_HTML };

@@ -7,10 +7,8 @@
  * and its volume is whatever has traded so far. A base breakout evaluated at
  * 11am on partial volume looks completely different by 15:30.
  *
- * The scheduled swing scan runs after the close (SWING_SCAN_TIME), when the
- * final bar IS the completed session, so it uses the array as-is. A caller
- * running mid-session must pass `dropPartialBar: true` to discard today's
- * incomplete bar and evaluate against the last closed one.
+ * All fetching paths filter by IST session date and the completion cutoff.
+ * An injected `now` is shared across stock/index evaluation for consistency.
  *
  * Same failure contract as the intraday signals: every function returns
  * null/false rather than throwing, so one bad symbol never kills a scan.
@@ -19,6 +17,7 @@
 const { getHist, INTERVAL } = require('../services/tvHistory');
 const { annotateSwing } = require('./swingTa');
 const S = require('../config/swingConstants');
+const { completedBars } = require('../services/dailyBars');
 
 const mean = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
 
@@ -29,20 +28,14 @@ const mean = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
  * cadence over ~150 symbols that would be wasteful and slow, so the swing
  * side fetches once and passes the array around.
  *
- * `dropPartialBar` discards the final bar. Pass it when the market is open,
- * because the feed's last bar is then today's still-forming one. It defaults
- * to false so the post-close scheduled scan keeps the completed session -
- * the bar it actually wants to evaluate.
- *
- * Note this can't distinguish "today's partial bar" from "yesterday's
- * complete bar" by content alone; it trusts the caller, which is why the
- * scheduled run is pinned to after the close.
+ * Completed sessions are selected before indicators are computed. Legacy
+ * dropPartialBar options are harmless; callers no longer control correctness.
  */
-async function loadDaily(symbol, { dropPartialBar = false } = {}) {
-  const candles = await getHist(symbol, 'NSE', INTERVAL.IN_DAILY, S.SWING_DAILY_BARS);
+async function loadDaily(symbol, { now = new Date(), fetchHistory = getHist } = {}) {
+  const candles = await fetchHistory(symbol, 'NSE', INTERVAL.IN_DAILY, S.SWING_DAILY_BARS);
   if (!candles || candles.length < 60) return null;
 
-  const usable = dropPartialBar ? candles.slice(0, -1) : candles;
+  const usable = completedBars(candles, now);
   if (usable.length < 60) return null;
 
   annotateSwing(usable, {
@@ -201,10 +194,10 @@ function rsLeader(candles, indexReturnPct) {
   if (n < lookback + 1) return null;
 
   const then = candles[n - 1 - lookback].close;
-  const now = candles[n - 1].close;
+  const latest = candles[n - 1].close;
   if (then <= 0) return null;
 
-  const stockReturn = ((now - then) / then) * 100;
+  const stockReturn = ((latest - then) / then) * 100;
   const outperformance = stockReturn - indexReturnPct;
   if (outperformance <= S.SWING_RS_MIN_OUTPERFORMANCE) return null;
 
@@ -214,24 +207,21 @@ function rsLeader(candles, indexReturnPct) {
 /**
  * Index return over the same lookback, for the RS comparison.
  *
- * Takes the same dropPartialBar treatment as the symbols it's compared
- * against - measuring a stock's closed-bar return against the index's
- * partial-bar return would bias every RS reading in whichever direction the
- * index happens to be moving today.
+ * Applies the same date-aware completion rule as stock history.
  */
-async function getIndexReturn(symbol = 'NIFTY', { dropPartialBar = false } = {}) {
+async function getIndexReturn(symbol = 'NIFTY', { now = new Date(), fetchHistory = getHist } = {}) {
   try {
-    const raw = await getHist(symbol, 'NSE', INTERVAL.IN_DAILY, S.SWING_RS_LOOKBACK_DAYS + 10);
+    const raw = await fetchHistory(symbol, 'NSE', INTERVAL.IN_DAILY, S.SWING_RS_LOOKBACK_DAYS + 10);
     if (!raw) return null;
 
-    const candles = dropPartialBar ? raw.slice(0, -1) : raw;
+    const candles = completedBars(raw, now);
     if (candles.length < S.SWING_RS_LOOKBACK_DAYS + 1) return null;
 
     const n = candles.length;
     const then = candles[n - 1 - S.SWING_RS_LOOKBACK_DAYS].close;
-    const now = candles[n - 1].close;
+    const latest = candles[n - 1].close;
     if (then <= 0) return null;
-    return ((now - then) / then) * 100;
+    return ((latest - then) / then) * 100;
   } catch (e) {
     console.error(`getIndexReturn error: ${e.message}`);
     return null;
@@ -244,13 +234,12 @@ async function getIndexReturn(symbol = 'NIFTY', { dropPartialBar = false } = {})
  * (52w high, dry-up, RS, MA stack) contribute to the confluence count but
  * can't define an entry on their own - same split as the intraday side.
  *
- * `opts` is forwarded to loadDaily, so `{ dropPartialBar: true }` propagates
- * from the caller.
+ * `opts.now` is forwarded to both supplied-candle filtering and loadDaily.
  */
 async function evaluateSwingSignals(symbol, indexReturnPct, opts = {}) {
   try {
-    const candles = opts.candles || await loadDaily(symbol, opts);
-    if (!candles) return null;
+    const candles = opts.candles ? completedBars(opts.candles, opts.now) : await loadDaily(symbol, opts);
+    if (!candles || candles.length < 60) return null;
 
     const last = candles[candles.length - 1];
     if (!last.atr || last.atr <= 0) return null; // no ATR = can't size a stop

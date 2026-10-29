@@ -1,0 +1,35 @@
+const db=require('./supabaseStore');
+async function request(method,table,params,data){return (await db.request(method,table,{params,data,headers:{Prefer:'return=representation'}})).data;}
+async function one(table,params){return (await request('get',table,{...params,limit:1}))[0]||null;}
+module.exports={
+ alertUsers:()=>request('get','app_users',{select:'id,role,telegram_chat_id,telegram_next_at,alert_preferences,alerts_paused,alerts_muted_until',telegram_chat_id:'not.is.null',limit:100}),
+ userByChat:chat=>one('app_users',{telegram_chat_id:`eq.${chat}`}),
+ controls:(id,value)=>request('patch','app_users',{id:`eq.${id}`},value),
+ async enqueueAlert(row){return request('post','rpc/enqueue_personal_alert',null,{p_user:row.user_id,p_key:row.key,p_kind:row.kind,p_day:row.day||null,p_payload:row.payload,p_expires:row.expires,p_limit:row.limit||0});},
+ async dueAlerts(now){return (await request('get','alert_queue',{delivered_at:'is.null',skipped_at:'is.null',available_at:`lte.${now.toISOString()}`,order:'created_at.asc,id.asc',limit:500})).map(row=>({...row,key:row.dedupe_key}));},
+ updateAlert:(id,value)=>request('patch','alert_queue',{id:`eq.${id}`},value),
+ async signalsSince(since){const rows=[];for(let offset=0;;offset+=500){const page=await request('get','signal_events',{occurred_at:`gte.${since}`,order:'occurred_at.asc,id.asc',limit:500,offset});rows.push(...page);if(page.length<500)break;}return rows.map(r=>({eventKey:r.event_key,ts:r.occurred_at,mode:r.mode,symbol:r.symbol,signals:r.signal_types,price:r.price==null?null:Number(r.price),levels:r.levels,context:r.context}));},
+
+ userByEmail:email=>one('app_users',{email:`eq.${email}`}),
+ user:id=>one('app_users',{id:`eq.${id}`}),
+ register:(email,password,code)=>request('post','rpc/app_register',null,{p_email:email,p_password_hash:password,p_code_hash:code}),
+ bootstrap:(email,password)=>request('post','rpc/app_bootstrap',null,{p_email:email,p_password_hash:password}),
+ invite:row=>request('post','app_invites',null,row),
+ session:hash=>one('app_sessions',{token_hash:`eq.${hash}`,expires_at:`gt.${new Date().toISOString()}`}),
+ addSession:row=>request('post','app_sessions',null,row),
+ removeSession:hash=>request('delete','app_sessions',{token_hash:`eq.${hash}`}),
+ preferences:(id,value)=>request('patch','app_users',{id:`eq.${id}`},{alert_preferences:value}),
+ settings:(id,settings)=>request('patch','app_users',{id:`eq.${id}`},{settings}),
+ async link(id,hash){await request('delete','app_telegram_links',{user_id:`eq.${id}`});await request('post','app_telegram_links',null,{user_id:id,token_hash:hash,expires_at:new Date(Date.now()+10*60000).toISOString()});},
+ consumeLink:(hash,chat)=>request('post','rpc/app_link_telegram',null,{p_token_hash:hash,p_chat_id:chat}),
+ async unlink(id){await request('delete','app_telegram_links',{user_id:`eq.${id}`});return request('patch','app_users',{id:`eq.${id}`},{telegram_chat_id:null});},
+ signal:key=>one('signal_events',{event_key:`eq.${key}`}),
+ trades:id=>request('get','personal_trades',{user_id:`eq.${id}`,order:'opened_at.desc',limit:1000}),
+ addTrade:row=>request('post','rpc/app_take_trade',null,{p_trade:row}),
+ closeTrade:(user,id,price)=>request('patch','personal_trades',{id:`eq.${id}`,user_id:`eq.${user}`,closed_at:'is.null'},{exit:price,closed_at:new Date().toISOString()}),
+ async openTrades(){const rows=[];for(let offset=0;;offset+=500){const page=await request('get','personal_trades',{closed_at:'is.null',order:'id.asc',limit:500,offset});rows.push(...page);if(page.length<500)return rows;}},
+ highest:(id,price)=>request('patch','personal_trades',{id:`eq.${id}`,highest:`lt.${price}`,closed_at:'is.null'},{highest:price}),
+ async reminder(row){await db.request('post','personal_reminders',{params:{on_conflict:'trade_id,kind'},data:row,headers:{Prefer:'resolution=ignore-duplicates,return=minimal'}});},
+ pending:()=>request('get','personal_reminders',{delivered_at:'is.null',limit:100,order:'id.asc'}),
+ delivered:id=>request('patch','personal_reminders',{id:`eq.${id}`},{delivered_at:new Date().toISOString()}),
+};

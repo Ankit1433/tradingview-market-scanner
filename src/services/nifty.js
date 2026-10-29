@@ -9,6 +9,8 @@ const { NIFTY_SYMBOL, NIFTY_CACHE_MS } = require('../config/constants');
  * Mirrors get_nifty_change().
  */
 async function getNiftyChange() {
+  const market = require('../marketData');
+  if (market.name === 'upstox') return market.provider().niftyChange();
   if (Date.now() - state.nifty.ts < NIFTY_CACHE_MS) {
     return state.nifty.value;
   }

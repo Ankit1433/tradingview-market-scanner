@@ -1,0 +1,48 @@
+process.env.PRIVATE_MODE='false';process.env.SWING_DATA_DIR='/tmp/ankquant-upstox-tests';
+const assert=require('node:assert/strict'),fs=require('fs');
+const {UpstoxProvider,RequestBudget,normalize,chunks}=require('./src/marketData/upstox');
+const {Feed}=require('./src/marketData/feed');
+const {EventEmitter}=require('events');
+const {closeClient}=require('./src/services/tvHistory');
+const instruments=[{segment:'NSE_EQ',instrument_type:'EQ',trading_symbol:'TEST',instrument_key:'NSE_EQ|TEST'},{segment:'NSE_INDEX',instrument_key:'NSE_INDEX|Nifty 50',trading_symbol:'NIFTY'}];
+const now=new Date('2026-10-28T06:00:00Z');
+const row=(date,price=100,volume=1000)=>[date,price,price+2,price-2,price+1,volume,0];
+let n=0;function check(name,fn){fn();n++;console.log('  ✓ '+name);}
+async function main(){fs.rmSync(process.env.SWING_DATA_DIR,{recursive:true,force:true});
+ check('candle normalization preserves null index volume and sorts/dedupes',()=>{const bars=normalize([row('2026-10-27T09:15:00+05:30'),row('2026-10-26T09:15:00+05:30',100,null),row('2026-10-27T09:15:00+05:30',110)]);assert.equal(bars.length,2);assert.equal(bars[0].volume,null);assert.equal(bars[1].open,110);});
+ check('malformed OHLC is rejected without fabrication',()=>assert.throws(()=>normalize([['bad',100,90,110,100,0]])));
+ check('5-minute chunks never exceed monthly request window',()=>{assert.equal(chunks('2026-01-01','2026-03-01').length,3);for(const [a,b]of chunks('2026-01-01','2026-03-01'))assert(Date.parse(b)-Date.parse(a)<28*86400000);});
+ let calls=[];const transport=async config=>{calls.push(config);if(config.url.includes('market-quote'))return{data:{status:'success',data:{'NSE_EQ:TEST':{instrument_token:'NSE_EQ|TEST',last_price:110,prev_close_price:100,timestamp:now.toISOString(),volume:1000}}}};return{data:{status:'success',data:{candles:config.url.includes('/intraday/')?[row('2026-10-28T11:20:00+05:30'),row('2026-10-28T11:30:00+05:30')]:[row('2026-10-27T15:25:00+05:30')]}}};};
+ const p=new UpstoxProvider({token:'fake-only',transport,clock:()=>now,instruments,budget:{take:async()=>{}}});
+ const bars=await p.history('TEST','5',2);check('current intraday candles exclude forming bar and publication delay',()=>{assert.equal(bars.at(-1).time,Date.parse('2026-10-28T11:20:00+05:30')/1000);assert(calls.some(c=>c.url.includes('NSE_EQ%7CTEST')));});
+ const count=calls.length;await p.history('TEST','5',2);check('warm candle cache avoids refetch',()=>assert.equal(calls.length,count));
+ const restarted=new UpstoxProvider({token:'fake-only',transport,clock:()=>now,instruments,budget:{take:async()=>{}}});await restarted.history('TEST','5',2);check('persistent cache restores across provider restart',()=>assert.equal(calls.length,count));
+ assert.equal((await p.instrument('NIFTY')).instrument_key,'NSE_INDEX|Nifty 50');
+ assert.equal((await p.quotes(['TEST'])).TEST.last_price,110);
+ await assert.rejects(()=>new UpstoxProvider({token:'',instruments}).request('/v3/test'),/TOKEN_MISSING/);
+ let rejected=0;const auth=new UpstoxProvider({token:'fake',budget:{take:async()=>{}},transport:async()=>{rejected++;throw{response:{status:401}};}});await assert.rejects(()=>auth.request('/v3/test'),/AUTH_REJECTED/);await assert.rejects(()=>auth.request('/v3/test'),/AUTH_REJECTED/);check('authentication failures block repeated calls and expose no credential',()=>assert.equal(rejected,1));
+ let attempts=0,sleeps=[];const retry=new UpstoxProvider({token:'fake',budget:{take:async()=>{}},sleep:async ms=>sleeps.push(ms),transport:async()=>{if(attempts++===0)throw{response:{status:429,headers:{'retry-after':'2'}}};return{data:{status:'success',data:{ok:true}}};}});await retry.request('/v3/test');check('429 honors Retry-After',()=>assert(sleeps[0]>=2000));
+ let time=0,waits=[];const budget=new RequestBudget({clock:()=>time,sleep:async ms=>{waits.push(ms);time+=ms;},limits:[[1000,1],[60000,2]]});await budget.take();await budget.take();await budget.take();check('budget enforces both short and longer windows',()=>assert(waits.some(ms=>ms>50000)));
+ await assert.rejects(()=>p.screen('swing'),/PARITY_APPROVAL_REQUIRED/);
+ const stale=new UpstoxProvider({token:'fake',instruments,clock:()=>now,budget:{take:async()=>{}},transport:async()=>({data:{status:'success',data:{x:{instrument_token:'NSE_EQ|TEST',last_price:100,timestamp:'2020-01-01T00:00:00Z'}}}})});await assert.rejects(()=>stale.quotes(['TEST']),/STALE/);
+ const manifest=process.env.SWING_DATA_DIR+'/universe.json';fs.writeFileSync(manifest,JSON.stringify({source:'synthetic test fixture',asOf:now.toISOString(),adjustmentPolicy:'verified',stocks:[{symbol:'TEST',marketCap:1e10,sector:'IT',eligible:true}]}));
+ process.env.UPSTOX_SCREENING_APPROVED='true';process.env.UPSTOX_UNIVERSE_FILE=manifest;
+ const screener=new UpstoxProvider({token:'fake',clock:()=>now,instruments,budget:{take:async()=>{}},transport});
+ screener.quotes=async()=>({TEST:{last_price:110,prev_close_price:100,volume:1800000,timestamp:now.toISOString()}});
+ screener.history=async()=>Array.from({length:250},(_,i)=>({time:1+i*86400,open:100,high:103,low:97,close:100,volume:600000}));
+ const universe=await screener.screen('intraday');check('internal screener uses approved metadata, volume and ATR thresholds',()=>{assert.equal(universe.TEST.relVolume,3);assert.equal(universe.TEST.sector,'IT');for(const key of ['perfWeek','perfMonth','perf3Month','high52w','low52w','sma50','sma200'])assert(Number.isFinite(universe.TEST[key]));});
+ fs.writeFileSync(manifest,JSON.stringify({source:'test',asOf:'2000-01-01T00:00:00Z',adjustmentPolicy:'verified',stocks:[]}));await assert.rejects(()=>screener.screen('swing'),/STALE_OR_UNVERIFIED/);delete process.env.UPSTOX_SCREENING_APPROVED;delete process.env.UPSTOX_UNIVERSE_FILE;
+ const {expectedLast,assertFresh}=require('./src/marketData/freshness');
+ check('daily freshness uses prior session before cutoff and today after cutoff',()=>{assert.equal(expectedLast('D',new Date('2026-10-28T06:00:00Z')),'2026-10-27');assert.equal(expectedLast('D',new Date('2026-10-28T10:15:00Z')),'2026-10-28');});
+ check('weekend and holiday freshness finds the preceding session',()=>{assert.equal(expectedLast('D',new Date('2026-10-25T06:00:00Z')),'2026-10-23');assert.equal(expectedLast('D',new Date('2026-10-02T06:00:00Z')),'2026-10-01');});
+ check('freshness rejects missing final bars even outside market hours',()=>assert.throws(()=>assertFresh([{time:Date.parse('2026-10-28T09:15:00+05:30')/1000}],'5',new Date('2026-10-28T12:00:00Z')),/STALE/));
+ let masterCalls=0;const masterTransport=async()=>{masterCalls++;return{data:Buffer.from(JSON.stringify(instruments))};};const master=new UpstoxProvider({token:'fake',clock:()=>now,transport:masterTransport,cacheDir:process.env.SWING_DATA_DIR+'/master-test'});await Promise.all([master.instrument('TEST'),master.instrument('NIFTY')]);const masterRestart=new UpstoxProvider({token:'fake',clock:()=>now,transport:masterTransport,cacheDir:process.env.SWING_DATA_DIR+'/master-test'});await masterRestart.instrument('TEST');check('concurrent master lookups coalesce and restart uses persisted master',()=>assert.equal(masterCalls,1));
+ let owner=true,lost=false;const lease=await require('./src/marketData/ownership').acquire({request:async()=>({data:owner}),period:5,onLost:()=>lost=true});owner=false;await new Promise(r=>setTimeout(r,20));await lease.stop();check('ownership loss stops a worker lease',()=>assert(lost));
+ const outbox=require('./src/services/pushOutbox');outbox.save([{eventKey:'a',symbol:'TEST'}]);check('outbox recovers and dedupes persisted rows',()=>{assert.equal(outbox.load().length,1);assert.equal(outbox.merge([...outbox.load(),...outbox.load()]).length,1);});
+ class Socket extends EventEmitter{constructor(){super();this.readyState=1;Socket.instance=this;}send(data){this.sent=JSON.parse(data.toString());}terminate(){this.emit('close');}}
+ const timers=[];const feed=new Feed({provider:{request:async()=>({authorized_redirect_uri:'wss://feed.upstox.com/test'})},Socket,schedule:fn=>{timers.push(fn);return 1;},cancel:()=>{}});feed.subscribe(['NSE_EQ|TEST']);await feed.start();Socket.instance.emit('open');check('feed subscribes in binary V3 format',()=>assert.equal(Socket.instance.sent.method,'sub'));
+ const pb=require('protobufjs');const type=(await pb.load(require('path').join(__dirname,'src/marketData/MarketDataFeed.proto'))).lookupType('com.upstox.marketdatafeederv3udapi.rpc.proto.FeedResponse');const buffer=type.encode(type.create({feeds:{'NSE_EQ|TEST':{ltpc:{ltp:101,ltt:123,cp:100}}},currentTs:123})).finish();const decoded=await feed.decode(buffer);check('official Protobuf schema decodes live price',()=>assert.equal(decoded.feeds['NSE_EQ|TEST'].ltpc.ltp,101));Socket.instance.emit('close');assert.equal(timers.length,1);feed.stop();check('feed stop cancels reconnect ownership',()=>assert.equal(feed.state,'stopped'));
+ const {compare}=require('./scripts/compare-screener');const diff=compare({asOf:'2026-10-28T06:00:00Z',stocks:{TEST:{price:100,sector:'IT'},OLD:{}}},{asOf:'2026-10-28T06:00:00Z',stocks:{TEST:{price:110,sector:'IT'},NEW:{}}});check('parity report exposes universe changes and numeric differences',()=>{assert.deepEqual(diff.onlyBaseline,['OLD']);assert.deepEqual(diff.onlyCandidate,['NEW']);assert.equal(diff.comparisons[0].fields.price.absoluteDifference,10);assert.throws(()=>compare({asOf:'a',stocks:{}},{asOf:'b',stocks:{}}));});
+ console.log(`Upstox: ${n} checks passed; all responses synthetic, no authenticated live requests.`);
+}
+main().catch(e=>{console.error(e.message);process.exitCode=1;}).finally(closeClient);

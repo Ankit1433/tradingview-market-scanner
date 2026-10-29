@@ -115,12 +115,14 @@ async function fetchScan(payload) {
 
 /** Main scan universe - mirrors get_stocks(). Throws on HTTP/parse failure, same as the Python version. */
 async function getStocks() {
-  return fetchScan(PAYLOAD);
+  const market = require('../marketData');
+  return market.name === 'upstox' ? market.provider().screen('intraday') : fetchScan(PAYLOAD);
 }
 
 /** Early/building-momentum scan - mirrors get_early_stocks(). */
 async function getEarlyStocks() {
-  return fetchScan(EARLY_PAYLOAD);
+  const market = require('../marketData');
+  return market.name === 'upstox' ? market.provider().screen('early') : fetchScan(EARLY_PAYLOAD);
 }
 
 module.exports = { getStocks, getEarlyStocks, PAYLOAD, EARLY_PAYLOAD };

@@ -55,15 +55,7 @@ module.exports = {
   SWING_RS_MIN_OUTPERFORMANCE: 8,
 
   // ---- Confluence ----
-  // Lower than the intraday gate (3) because daily signals are individually
-  // far less noisy - a daily base breakout is a rarer event than a 5-min one,
-  // so demanding three simultaneously would produce almost no trades.
-  // Raised from 2 -> 3. With entrySignal now required (see swingLoop.js),
-  // 2 was still too easy to clear: a structural signal plus any ONE
-  // contextual one was enough, and the contextual pool (MA STACK, 52W HIGH,
-  // RS LEADER) are correlated restatements of "uptrend", not independent
-  // confirmation. Matches the same correction already applied to intraday's
-  // CONFLUENCE_MIN_SIGNALS (2 -> 3) for the identical reason.
+  // Three signals plus a structural entry/stop are required for entry confluence.
   SWING_CONFLUENCE_MIN_SIGNALS: 3,
 
   // ---- Risk / position management ----
@@ -81,11 +73,8 @@ module.exports = {
   // that's deliberate, not an omission.
 
   // ---- Schedule ----
-  // The swing scan is tuned to run at market open so it can evaluate the prior
-  // close's daily structure and surface entries as soon as the session is live.
-  // This is intentionally earlier than the default after-close scan to pick up
-  // valid setups near 09:15 IST without waiting until the close.
-  SWING_SCAN_TIME: { h: 9, m: 15 }, // market open, once daily
+  // Configurable after-close IST scan; cannot precede bar completion.
+  SWING_SCAN_TIME: require('./swingTiming').scan,
   SWING_SCAN_CHECK_INTERVAL_MS: 5 * 60 * 1000, // how often to check if it's time
 
   SWING_SIGNAL_EMOJI: {

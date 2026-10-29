@@ -64,10 +64,12 @@ function buildCloseSummary(dateLabel) {
   );
 }
 
-async function runCycle() {
+const { isTradingDay } = require('../services/tradingCalendar');
+
+async function runCycle(now = new Date()) {
   await processTelegramCommands(); // every cycle, regardless of market hours
 
-  let { time: nowTime, weekday, dateKey, label } = nowIST();
+  let { time: nowTime, weekday, dateKey, label } = nowIST(now);
   const TEST_MODE = process.env.TEST_MODE === 'true';
 
   let sTime;
@@ -76,8 +78,8 @@ async function runCycle() {
   else sTime = 20000;
 
   if (!TEST_MODE) {
-    if (isWeekend(weekday)) {
-      console.log('Weekend - Sleeping');
+    if (!isTradingDay(dateKey)) {
+      console.log('Non-trading day - Sleeping');
       return 300000;
     }
     if (min(nowTime) < min(C.MARKET_OPEN)) {
@@ -204,7 +206,7 @@ async function runCycle() {
       }
 
       // Position-opening intentionally NOT done here - a NEW alert alone is
-      // a single signal. Positions only open on confluence (2+ signals),
+      // a single signal. Positions only open on confluence (3+ signals),
       // see the candidates block below.
 
       const msg = msgLines.join('\n');

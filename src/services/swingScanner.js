@@ -134,6 +134,8 @@ function mapResults(data) {
  * rather than retrying aggressively, since this only runs once daily).
  */
 async function getSwingCandidates() {
+  const market = require('../marketData');
+  if (market.name === 'upstox') return market.provider().screen('swing');
   const res = await axios.post(URL, SWING_PAYLOAD, { headers: HEADERS, timeout: 20000 });
   return mapResults(res.data.data);
 }

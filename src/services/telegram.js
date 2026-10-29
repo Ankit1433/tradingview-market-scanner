@@ -118,7 +118,7 @@ async function drain() {
         // Non-rate-limit failure (bad token, network blip) - matches the
         // original safeSend contract: log it, move on, never throw into the
         // scan loop.
-        console.error(`[send_message failed] ${e.message}`);
+        console.error(`[telegram] send failed (${Number(e.response?.status) || 'network'})`);
       }
     }
   }
@@ -344,7 +344,7 @@ async function getTelegramUpdates(offset) {
     const res = await axios.get(url, { params, timeout: 10000 });
     return res.data.result || [];
   } catch (e) {
-    console.error(`getTelegramUpdates error: ${e.message}`);
+    console.error('[telegram] command polling failed');
     return [];
   }
 }
@@ -355,6 +355,8 @@ async function getTelegramUpdates(offset) {
  * checking 'message' silently misses everything if CHAT_ID is a channel.
  */
 async function processTelegramCommands() {
+  // Private mode uses only the verified personal bot worker; no shared-money commands.
+  if (process.env.PRIVATE_MODE !== 'false') return;
   const updates = await getTelegramUpdates(state.telegramLastUpdateId);
   for (const update of updates) {
     state.telegramLastUpdateId = update.update_id + 1;

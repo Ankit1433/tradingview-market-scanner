@@ -39,6 +39,8 @@ const eventStream = require("../services/eventStream");
 const pushClient = require("../services/pushClient");
 const S = require("../config/swingConstants");
 
+const { isScanDue } = require('../services/tradingCalendar');
+const { barDateKey } = require('../services/dailyBars');
 let running = false;
 let timer = null;
 let scanning = false; // guards against a second scan starting while one is mid-flight
@@ -50,7 +52,7 @@ const min = (t) => toMinutes(t);
  * hunt for new entries, so capital freed by an exit today is available to a
  * new entry today.
  */
-async function manageOpenPositions() {
+async function manageOpenPositions(now = new Date()) {
   const positions = swingState.openPositionsList();
   if (positions.length === 0) return;
 
@@ -58,7 +60,7 @@ async function manageOpenPositions() {
 
   for (const pos of positions) {
     try {
-      const candles = await loadDaily(pos.symbol);
+      const candles = await loadDaily(pos.symbol, { now });
       if (!candles) {
         await safeSend(
           `⚠️ SWING DATA MISSING — ${pos.symbol}\n` +
@@ -68,7 +70,7 @@ async function manageOpenPositions() {
         continue;
       }
       const last = candles[candles.length - 1];
-      const messages = managePosition(pos.symbol, last.close, last.atr);
+      const messages = managePosition(pos.symbol, last.close, last.atr, { dateKey: barDateKey(last) });
       for (const msg of messages) await safeSend(msg);
     } catch (e) {
       console.error(`[swing] manage error [${pos.symbol}]: ${e.message}`);
@@ -77,7 +79,7 @@ async function manageOpenPositions() {
 }
 
 /** Hunt for new swing entries across the candidate universe. */
-async function scanForEntries(dateKey) {
+async function scanForEntries(dateKey, now) {
   let universe;
   try {
     universe = await getSwingCandidates();
@@ -94,7 +96,7 @@ async function scanForEntries(dateKey) {
     `[swing] ${symbols.length} candidates passed the screener filter`,
   );
 
-  const indexReturn = await getIndexReturn();
+  const indexReturn = await getIndexReturn('NIFTY', { now });
   if (indexReturn === null) {
     console.warn(
       "[swing] index return unavailable — RS LEADER signal disabled for this scan",
@@ -107,7 +109,7 @@ async function scanForEntries(dateKey) {
   for (const symbol of symbols) {
     if (swingState.alreadyAlerted(dateKey, symbol)) continue;
 
-    const result = await evaluateSwingSignals(symbol, indexReturn);
+    const result = await evaluateSwingSignals(symbol, indexReturn, { now });
     if (!result) continue;
     if (result.signals.length < S.SWING_CONFLUENCE_MIN_SIGNALS) continue;
 
@@ -221,7 +223,7 @@ async function scanForEntries(dateKey) {
 }
 
 /** Full daily swing pass: manage existing positions, then hunt for new ones. */
-async function runSwingScan({ force = false } = {}) {
+async function runSwingScan({ force = false, now = new Date() } = {}) {
   if (scanning) {
     console.log("[swing] scan already in progress, skipping");
     return null;
@@ -229,7 +231,7 @@ async function runSwingScan({ force = false } = {}) {
   scanning = true;
 
   try {
-    const { dateKey } = nowIST();
+    const { dateKey } = nowIST(now);
     const state = swingState.getState();
 
     if (!force && state.lastScanDate === dateKey) {
@@ -243,8 +245,8 @@ async function runSwingScan({ force = false } = {}) {
       dateKey,
     });
 
-    await manageOpenPositions();
-    const { scanned, alerted } = await scanForEntries(dateKey);
+    await manageOpenPositions(now);
+    const { scanned, alerted } = await scanForEntries(dateKey, now);
 
     state.lastScanDate = dateKey;
     swingState.save();
@@ -291,19 +293,12 @@ async function runSwingScan({ force = false } = {}) {
 
 async function tick() {
   try {
-    const { time, weekday, dateKey } = nowIST();
+    const now = new Date();
     const state = swingState.getState();
     const TEST_MODE = process.env.TEST_MODE === "true";
 
-    if (!TEST_MODE) {
-      if (isWeekend(weekday)) {
-        // no-op; markets closed
-      } else if (
-        min(time) >= min(S.SWING_SCAN_TIME) &&
-        state.lastScanDate !== dateKey
-      ) {
-        await runSwingScan();
-      }
+    if (!TEST_MODE && isScanDue(now, S.SWING_SCAN_TIME, state.lastScanDate)) {
+      await runSwingScan({ now });
     }
   } catch (e) {
     console.error("[swing] tick error:", e);

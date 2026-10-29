@@ -13,8 +13,23 @@
     "test:swing-backfill": "node test-swing-backfill.js",
     "test:api": "node test-api.js",
     "test:signal-consistency": "node test-signal-consistency.js",
-    "test": "node test-swing.js && node test-swing-backfill.js && node test-api.js && node test-ingest.js && node test-signal-consistency.js",
-    "test:ingest": "node test-ingest.js"
+    "test": "node test-swing.js && node test-swing-backfill.js && node test-api.js && node test-ingest.js && node test-signal-consistency.js && node test-phase0.js && node test-evidence.js && node test-ui.js && node test-personal.js && node test-phase5.js && node test-keepalive.js && node test-upstox.js && node test-alerts.js",
+    "test:ingest": "node test-ingest.js",
+    "test:phase0": "node test-phase0.js",
+    "test:evidence": "node test-evidence.js",
+    "outcomes": "node scripts/evaluate-outcomes.js",
+    "backtest:swing": "node scripts/backtest-swing.js",
+    "test:ui": "node test-ui.js",
+    "test:personal": "node test-personal.js",
+    "accounts:bootstrap": "node scripts/bootstrap-admin.js",
+    "test:phase5": "node test-phase5.js",
+    "test:browser": "node test-browser.js",
+    "test:keepalive": "node test-keepalive.js",
+    "test:upstox": "node test-upstox.js",
+    "check:upstox": "node scripts/check-upstox.js",
+    "launch:check": "node scripts/check-launch.js",
+    "compare:screeners": "node scripts/compare-screener.js",
+    "test:alerts": "node test-alerts.js"
   },
   "dependencies": {
     "@mathieuc/tradingview": "^3.5.2",
@@ -22,7 +37,9 @@
     "axios": "^1.7.0",
     "dotenv": "^16.6.1",
     "express": "^4.19.2",
-    "node-cron": "^3.0.3"
+    "node-cron": "^3.0.3",
+    "protobufjs": "^8.8.1",
+    "ws": "^8.22.0"
   },
   "engines": {
     "node": ">=18"

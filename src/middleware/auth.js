@@ -21,7 +21,7 @@ const RATE_WINDOW_MS = 60 * 1000;
 const RATE_MAX_REQUESTS = Number(process.env.RATE_LIMIT_PER_MIN || 60);
 
 const API_KEY = process.env.API_KEY || null;
-const PUBLIC_MODE = process.env.PUBLIC_MODE === 'true';
+const PUBLIC_MODE = process.env.PUBLIC_MODE === 'true' || process.env.PRIVATE_MODE !== 'false';
 
 /**
  * Constant-time string compare. Overkill for a personal project, but a

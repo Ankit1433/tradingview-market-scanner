@@ -183,7 +183,7 @@ function record(entry) {
     price: entry.price ?? null,
     confluence: Boolean(entry.confluence),
     levels: entry.levels || null,
-    context: entry.context || null,
+    context: { ...(entry.context || {}), marketDataProvider: require('../marketData').name },
   });
 
   recent.push(record_);
@@ -289,4 +289,13 @@ function reset() {
   }
 }
 
-module.exports = { load, hydrateFromSupabase, record, hasEvent, query, stats, reset, JOURNAL_FILE };
+async function* iterateAll() {
+  const seen=new Set();
+  if(supabaseStore.status().connected){for await(const row of supabaseStore.iterateSignalEvents()){const r=fromDatabaseRow(row);seen.add(r.eventKey);yield r;}}
+  if(!fs.existsSync(DATA_DIR))return;
+  const readline=require('readline');
+  const files=fs.readdirSync(DATA_DIR).filter(n=>n==='signal-journal.jsonl'||/^signal-journal\.jsonl\..+\.archive$/.test(n));
+  for(const name of files){const lines=readline.createInterface({input:fs.createReadStream(path.join(DATA_DIR,name)),crlfDelay:Infinity});
+   for await(const line of lines){let r;try{r=normalizeRecord(JSON.parse(line));}catch(_){continue;}if(!seen.has(r.eventKey)){seen.add(r.eventKey);yield r;}}}
+}
+module.exports = { iterateAll, load, hydrateFromSupabase, record, hasEvent, query, stats, reset, JOURNAL_FILE };

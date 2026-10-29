@@ -4,47 +4,12 @@ const { getSwingCandidates } = require('../services/swingScanner');
 const journal = require('../state/signalJournal');
 const S = require('../config/swingConstants');
 
-const IST_TZ = 'Asia/Kolkata';
-const MARKET_CLOSE_MINUTES = 15 * 60 + 30;
+const { barDateKey, isBarComplete } = require('../services/dailyBars');
 const RS_LOOKBACK = S.SWING_RS_LOOKBACK_DAYS;
-
-function dateKeyInIST(timestamp) {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: IST_TZ,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(new Date(timestamp * 1000));
-  const get = (type) => parts.find((part) => part.type === type)?.value;
-  return `${get('year')}-${get('month')}-${get('day')}`;
-}
-
-function istDateKey(date) {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: IST_TZ,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(date);
-  const get = (type) => parts.find((part) => part.type === type)?.value;
-  return `${get('year')}-${get('month')}-${get('day')}`;
-}
-
+const dateKeyInIST = time => barDateKey({ time });
 function completedSessionBars(candles, now, count) {
-  const today = istDateKey(now);
-  const localTime = new Intl.DateTimeFormat('en-GB', {
-    timeZone: IST_TZ,
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(now);
-  const [hour, minute] = localTime.split(':').map(Number);
-  const todayIsComplete = hour * 60 + minute >= MARKET_CLOSE_MINUTES;
-
-  return candles
-    .map((candle, index) => ({ candle, index, dateKey: dateKeyInIST(candle.time) }))
-    .filter(({ dateKey }) => dateKey < today || (dateKey === today && todayIsComplete))
-    .slice(-count);
+  return candles.map((candle, index) => ({ candle, index, dateKey: barDateKey(candle) }))
+    .filter(({ candle }) => isBarComplete(candle, now)).slice(-count);
 }
 
 function indexReturnForDate(candles, dateKey) {
@@ -82,7 +47,7 @@ async function runSwingBackfill({
   const dates = new Set();
 
   for (const symbol of symbols) {
-    const candles = await loadCandles(symbol);
+    const candles = await loadCandles(symbol, { now });
     if (!candles) continue;
     scanned += 1;
 
@@ -92,7 +57,7 @@ async function runSwingBackfill({
       const indexReturn = indexCandles
         ? indexReturnForDate(indexCandles, target.dateKey)
         : null;
-      const result = await evaluate(symbol, indexReturn, { candles: historicalCandles });
+      const result = await evaluate(symbol, indexReturn, { candles: historicalCandles, now });
       if (!result || result.signals.length < S.SWING_CONFLUENCE_MIN_SIGNALS) continue;
 
       const timestamp = new Date(target.candle.time * 1000).toISOString();

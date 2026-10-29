@@ -162,11 +162,14 @@ function closeOut(symbol, pos, exitPrice, qty, reason, state) {
  * around. (If you want intraday stop triggering, that's a real broker
  * stop-loss order sitting in the market, not this.)
  */
-function managePosition(symbol, close, atr) {
+function managePosition(symbol, close, atr, { dateKey } = {}) {
   const state = swingState.getState();
   const pos = state.openPositions[symbol];
   if (!pos || pos.closed) return [];
 
+  // Forced scans must not age a position repeatedly on the same completed bar.
+  if (dateKey && (dateKey <= pos.openedOn || dateKey <= pos.lastManagedDate)) return [];
+  if (dateKey) pos.lastManagedDate = dateKey;
   const messages = [];
   pos.barsHeld += 1;
 

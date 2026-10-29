@@ -8,7 +8,7 @@ const { rateLimit, PUBLIC_MODE, API_KEY_CONFIGURED } = require('./middleware/aut
 const { spec, DOCS_HTML } = require('./docs/openapi');
 const pkg = require('../package.json');
 
-function createServer() {
+function createServer({ accountStore = require('./services/accountStore') } = {}) {
   const app = express();
 
   // Trust the first proxy hop so req.ip is the real client behind a reverse
@@ -29,7 +29,21 @@ function createServer() {
     return next();
   });
 
+  app.get('/healthz', (req,res)=>res.json({status:'ok'}));
   app.use('/api', rateLimit);
+  const {createAccounts,PRIVATE_MODE}=require('./middleware/accounts');
+  const accounts=createAccounts(accountStore);
+  if(PRIVATE_MODE && process.env.NODE_ENV==='production' && !process.env.APP_ORIGIN) throw new Error('APP_ORIGIN is required for private production hosting');
+  app.get('/login',(req,res)=>res.set('Cache-Control','no-store').sendFile(path.join(__dirname,'../public/login.html')));
+  app.use('/api/account',require('./routes/accounts').createRoutes(accountStore,accounts));
+  app.use((req,res,next)=>{
+    if(!PRIVATE_MODE || req.path.startsWith('/assets/') || req.path.startsWith('/icons/') || ['/manifest.webmanifest','/service-worker.js'].includes(req.path))return next();
+    if(require('./middleware/auth').hasValidKey(req))return next();
+    accounts.identify(req,res,()=>accounts.gate(req,res,next));
+  });
+  for (const page of ['symbol','alerts','stats']) app.get('/'+page,(req,res)=>res.sendFile(path.join(__dirname,'../public',page+'.html')));
+  app.get('/personal',(req,res)=>res.sendFile(path.join(__dirname,'../public/personal.html')));
+
 
   app.get('/', (req, res) => {
     if (req.get('accept')?.includes('text/html')) {
@@ -64,6 +78,8 @@ function createServer() {
   app.get('/app', (req, res) => {
     res.sendFile(path.join(__dirname, '..', 'public', 'scanner.html'));
   });
+
+  app.use('/assets', express.static(path.join(__dirname, '..', 'public', 'assets')));
 
   app.get('/manifest.webmanifest', (req, res) => {
     res.type('application/manifest+json').sendFile(path.join(__dirname, '..', 'public', 'manifest.webmanifest'));

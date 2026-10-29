@@ -69,6 +69,11 @@ router.get('/signals/recent', (req, res) => {
  * Aggregate stats. Never empty once the scanner has run at all — this is the
  * landing-page data.
  */
+router.get('/outcomes/stats', (req,res)=>res.json(require('../evidence/outcomes').aggregate(require('../state/outcomeStore').all())));
+router.get('/outcomes/:eventKey', (req,res)=>{
+ const outcome=require('../state/outcomeStore').get(req.params.eventKey);
+ return outcome?res.json(outcome):res.status(404).json({error:'No evaluated eligible signal with this event key'});
+});
 router.get('/stats', (req, res) => {
   const journalStats = journal.stats();
   const swing = swingState.getState();
@@ -114,6 +119,7 @@ router.get('/stats', (req, res) => {
 /** Market session state — lets a UI distinguish "closed" from "broken". */
 router.get('/market/status', (req, res) => {
   const status = getMarketStatus();
+  status.marketData = require('../marketData').status();
   const INGEST_MODE = process.env.INGEST_MODE === 'true';
 
   // A scanner that died at 10am produces exactly the same empty feed as a

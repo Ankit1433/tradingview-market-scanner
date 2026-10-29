@@ -1,3 +1,4 @@
+process.env.PRIVATE_MODE = 'false';
 /**
  * Verifies the split deployment: a remote API in INGEST_MODE receiving
  * signals pushed over HTTP from a scanner process.
@@ -10,6 +11,7 @@
  */
 
 process.env.SWING_DATA_DIR = '/tmp/ingest-test-data';
+require('fs').rmSync('/tmp/ingest-test-data/push-outbox.json', {force:true});
 process.env.API_KEY = 'ingest-key-abc';
 process.env.INGEST_MODE = 'true';
 process.env.PUBLIC_MODE = 'true';
