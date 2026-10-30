@@ -1,1 +1,74 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AnkQuant · Sign in</title><link rel="stylesheet" href="/assets/workspace.css"><link rel="stylesheet" href="/assets/accounts.css"></head><body><main class="account-shell"><a href="/app">AnkQuant</a><h1>Your private market desk.</h1><p>Invite-only paper research. No orders are placed.</p><form id="login-form" method="post" action="/api/account/login"><label>Email<input name="email" type="email" autocomplete="email" required maxlength="254"></label><label>Password<input name="password" type="password" autocomplete="current-password" minlength="12" maxlength="128" required></label><label>Invite code <small>(registration only)</small><input name="code" autocomplete="off" maxlength="64"></label><div class="form-actions"><button type="submit" name="action" value="login">Sign in</button><button type="submit" name="action" value="register">Accept invite</button></div></form><p id="account-status" role="status"></p></main><script src="/assets/accounts.js" defer></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#07090f">
+  <title>AnkQuant · Sign In</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/workspace.css">
+  <link rel="stylesheet" href="/assets/accounts.css">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+
+  <main id="main-content" tabindex="-1" class="account-shell">
+    <div class="account-header">
+      <a href="/app" class="brand brand-center" title="Return to public scanner">
+        <div class="brand-mark">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+            <polyline points="2 17 12 22 22 17"></polyline>
+            <polyline points="2 12 12 17 22 12"></polyline>
+          </svg>
+        </div>
+        <div class="brand-name">Ank<span>Quant</span></div>
+        <span class="badge badge-accent">TERMINAL</span>
+      </a>
+      <div class="research-tag">RESTRICTED PAPER RESEARCH</div>
+      <h1 class="account-title">AnkQuant Paper Desk</h1>
+      <p class="account-subtitle">Private algorithmic forward-testing & simulated paper execution. Zero live market orders are placed.</p>
+    </div>
+
+    <div class="account-card">
+      <form id="login-form" method="post" action="/api/account/login" novalidate>
+        <div class="form-field">
+          <label for="login-email" class="field-label">Email</label>
+          <input id="login-email" name="email" type="email" autocomplete="email" required maxlength="254" placeholder="operator@desk.internal" class="form-input">
+        </div>
+
+        <div class="form-field">
+          <label for="login-password" class="field-label">Password</label>
+          <input id="login-password" name="password" type="password" autocomplete="current-password" minlength="12" maxlength="128" required placeholder="••••••••••••" class="form-input">
+        </div>
+
+        <div class="form-field">
+          <label for="login-code" class="field-label">Invite Token <span class="field-hint">(new registration only)</span></label>
+          <input id="login-code" name="code" autocomplete="off" maxlength="64" placeholder="Enter registration code" class="form-input mono">
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" name="action" value="login" class="btn btn-primary btn-block">Sign in</button>
+          <button type="submit" name="action" value="register" class="btn btn-secondary btn-block">Accept Invite</button>
+        </div>
+      </form>
+
+      <p id="account-status" role="status" aria-live="polite" class="status-msg"></p>
+    </div>
+
+    <footer class="account-footer">
+      <div class="account-links">
+        <a href="/app" class="back-link">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+          Return to Scanner Dashboard
+        </a>
+      </div>
+      <p class="account-disclaimer">PAPER RESEARCH ONLY: All signals, risk metrics, and journal logs operate exclusively on simulated data models without exchange order routing.</p>
+    </footer>
+  </main>
+
+  <script src="/assets/accounts.js" defer></script>
+</body>
+</html>

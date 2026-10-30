@@ -504,6 +504,8 @@ See [PERSONAL_JOURNAL.md](PERSONAL_JOURNAL.md) for the new required migration, a
 
 ## Phase 5 UI
 
+The premium refresh keeps vanilla JavaScript and adds a shared dark layout, responsive navigation, updated forms and tables, and motion controls that respect device preferences. The personal page retains the admin NSE report import, Upstox preparation status and exclusions report. Private pages and API responses remain excluded from service-worker caching; the refreshed shell uses cache version 6. Google Fonts are optional; system font fallbacks work when external fonts are unavailable.
+
 Symbol charts with recorded-signal markers, saved account alert preferences, and detailed evidence statistics are implemented in vanilla JavaScript. See [PHASE5.md](PHASE5.md) for routes, the additive preference migration, browser tests and limitations. Alert delivery filtering is implemented by Phase 3 and requires its database migration and worker setup.
 
 ## Planned Phase 8 — Official Market Data Migration (Upstox)

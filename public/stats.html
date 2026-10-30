@@ -1,3 +1,359 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#090d15"><title>AnkQuant · Evidence & statistics</title><link rel="stylesheet" href="/assets/workspace.css"><link rel="stylesheet" href="/assets/pages.css"><script src="/assets/pages.js" defer></script></head>
-<body data-page="stats"><a class="skip-link" href="#main-content">Skip to content</a><div class="page-shell"><header class="page-header"><a class="brand-name" href="/app">AnkQuant<span class="paper-badge">PAPER RESEARCH</span></a><nav class="page-nav" aria-label="Main navigation"><a href="/app">Scanner</a><a href="/journal">Signal journal</a><a href="/symbol">Symbol</a><a href="/alerts">Alert settings</a><a href="/stats">Statistics</a><a href="/personal">My paper journal</a></nav></header><main id="main-content" tabindex="-1"><div class="page-intro"><div class="eyebrow">YOUR PRIVATE MARKET DESK</div><h1>Evidence & statistics</h1><p>Informational paper research · No orders placed</p></div><p id="page-status" role="status" aria-live="polite"></p><div class="notice-box">Every metric shows its own sample size. Groups with n &lt; 30 are flagged. Missing observations are excluded, not counted as zero.</div><section class="surface"><h2>My personal paper results</h2><div id="my-stats" aria-live="polite">Loading your results…</div></section><section class="surface"><h2>Shared signal evidence</h2><p>Forward outcomes for journaled signals. These are separate from your personal paper trades.</p><div id="evidence-coverage"></div><div class="controls"><label>Group by<select id="stats-group"><option value="byMode">Mode</option><option value="byLabel">Signal label</option><option value="byConfluence">Confluence</option><option value="bySector">Sector</option></select></label><label>Observation<select id="stats-horizon"><option value="result">First touch / final result</option><option value="eod">Intraday end of day</option><option value="1">Swing +1 session</option><option value="3">Swing +3 sessions</option><option value="5">Swing +5 sessions</option></select></label><label>Metric<select id="stats-metric"><option value="returnR">Return in R</option><option value="returnPct">Return %</option><option value="mfeR">Maximum favourable excursion (R)</option><option value="maeR">Maximum adverse excursion (R)</option></select></label><button type="button" id="refresh-stats">Refresh</button></div><p id="stats-description" class="muted"></p><div class="table-scroll"><table><caption>Paper evidence by selected group</caption><thead><tr><th scope="col">Group</th><th scope="col">Eligible</th><th scope="col">Sample n</th><th scope="col">Mean</th><th scope="col">Confidence note</th></tr></thead><tbody id="stats-rows"></tbody></table></div><p id="stats-empty" role="status"></p></section></main><footer>Paper results exclude slippage and fees. Research observations are not broker fills.</footer></div></body></html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#07090f" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="AnkQuant" />
+    <title>AnkQuant — Evidence & Statistics</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icons/market-scanner-192.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,750&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/assets/workspace.css" />
+    <link rel="stylesheet" href="/assets/pages.css" />
+    <style>
+      /* ── Stats & Evidence specific styles ─────────────── */
+      .stats-shell {
+        max-width: 1300px;
+        margin: 0 auto;
+      }
+      .stats-card {
+        padding: 24px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: var(--r-lg);
+        margin-bottom: 24px;
+      }
+      .stats-card-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 16px;
+        flex-wrap: wrap;
+      }
+      .stats-card-header h2 {
+        margin: 0 0 4px;
+        font: 700 18px var(--sans);
+        letter-spacing: -0.025em;
+        color: var(--text);
+      }
+      .stats-card-header p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      /* Notice banner */
+      .stats-notice {
+        display: flex;
+        align-items: flex-start;
+        gap: 14px;
+        padding: 16px 20px;
+        background: linear-gradient(135deg, rgba(240,180,41,0.08) 0%, rgba(240,180,41,0.02) 100%);
+        border: 1px solid rgba(240,180,41,0.22);
+        border-radius: var(--r-md);
+        margin: 22px 0;
+        color: var(--text-2);
+        font-size: 13px;
+        line-height: 1.6;
+      }
+      .stats-notice-icon {
+        font-size: 18px;
+        color: var(--amber);
+        flex-shrink: 0;
+        margin-top: 1px;
+      }
+
+      /* Coverage pill */
+      #evidence-coverage {
+        display: inline-flex;
+        align-items: center;
+        padding: 6px 12px;
+        border: 1px solid rgba(108,180,245,0.25);
+        border-radius: var(--r-sm);
+        background: var(--blue-dim);
+        color: var(--blue);
+        font: 600 12px var(--mono);
+        margin: 10px 0 16px;
+      }
+
+      /* Controls bar */
+      .stats-controls-bar {
+        display: flex;
+        align-items: flex-end;
+        gap: 12px;
+        flex-wrap: wrap;
+        padding: 16px 18px;
+        background: var(--panel-2);
+        border: 1px solid var(--line-2);
+        border-radius: var(--r-md);
+        margin: 14px 0;
+      }
+      .stats-controls-bar label {
+        flex: 1 1 160px;
+        min-width: 140px;
+        font: 700 10px var(--mono);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--dim);
+      }
+      .stats-controls-bar select {
+        width: 100%;
+        margin-top: 5px;
+        margin-bottom: 0;
+        min-height: 38px;
+      }
+      .stats-controls-bar button {
+        min-height: 38px;
+        margin-bottom: 0;
+      }
+
+      /* Horizon note */
+      #stats-description {
+        margin: 10px 0 16px;
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      /* Stat cards for personal results */
+      .stat-cards {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        margin: 14px 0 12px;
+      }
+      @media (max-width: 800px) {
+        .stat-cards { grid-template-columns: repeat(2, 1fr); }
+      }
+      @media (max-width: 480px) {
+        .stat-cards { grid-template-columns: 1fr; }
+      }
+      .stat-card {
+        padding: 16px 18px;
+        background: var(--panel-2);
+        border: 1px solid var(--line);
+        border-radius: var(--r-md);
+        transition: border-color var(--t-base), transform var(--t-base);
+      }
+      .stat-card:hover {
+        border-color: var(--line-2);
+        transform: translateY(-2px);
+      }
+      .stat-card span {
+        display: block;
+        font: 700 10px var(--mono);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--dim);
+      }
+      .stat-card strong {
+        display: block;
+        margin-top: 8px;
+        font: 700 28px/1 var(--mono);
+        color: var(--green);
+        letter-spacing: -0.04em;
+      }
+
+      /* Evidence table */
+      .stats-table-wrap {
+        overflow-x: auto;
+        border-radius: var(--r-sm);
+        border: 1px solid var(--line);
+      }
+      .stats-table-wrap table {
+        width: 100%;
+        border-collapse: collapse;
+        text-align: left;
+        white-space: nowrap;
+      }
+      .stats-table-wrap th {
+        padding: 11px 16px;
+        background: var(--panel-2);
+        border-bottom: 1px solid var(--line-2);
+        color: var(--dim);
+        font: 700 10px var(--mono);
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+      }
+      .stats-table-wrap td {
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--line);
+        font-size: 13px;
+        vertical-align: middle;
+      }
+      .stats-table-wrap tbody tr:last-child td {
+        border-bottom: 0;
+      }
+      .stats-table-wrap tbody tr:hover td {
+        background: rgba(255, 255, 255, 0.025);
+      }
+      td.warning {
+        color: var(--amber);
+      }
+
+      #stats-empty:not(:empty) {
+        margin-top: 14px;
+        padding: 12px;
+        text-align: center;
+        color: var(--dim);
+        font-size: 13px;
+      }
+    </style>
+    <script src="/assets/pages.js" defer></script>
+    <script src="/assets/workspace.js" defer></script>
+  </head>
+
+  <body data-page="stats">
+    <a class="skip-link" href="#main-content">Skip to content</a>
+
+    <div class="page-shell stats-shell">
+      <!-- ── Top navigation bar ──────────────────────── -->
+      <header class="topbar" role="banner" style="margin-top:14px;">
+        <a class="brand" href="/" aria-label="AnkQuant home">
+          <div class="brand-mark" aria-hidden="true">AQ</div>
+          <div>
+            <div class="brand-name">AnkQuant</div>
+            <div class="brand-caption">NSE · Quantitative evidence</div>
+          </div>
+        </a>
+
+        <nav class="nav page-nav" aria-label="Main navigation">
+          <a href="/">Scanner</a>
+          <a href="/journal">Signal journal</a>
+          <a href="/symbol">Symbol</a>
+          <a href="/alerts">Alert settings</a>
+          <a class="active" href="/stats" aria-current="page">Statistics</a>
+          <a href="/personal">My paper journal</a>
+        </nav>
+
+        <button class="motion-toggle" type="button" aria-label="Pause decorative animations" aria-pressed="false">Motion on</button>
+      </header>
+
+      <!-- ── Main content ────────────────────────────── -->
+      <main id="main-content" tabindex="-1">
+
+        <!-- Research disclaimer -->
+        <div class="paper-banner" role="note">
+          <span class="paper-badge">PAPER RESEARCH</span>
+          <span>Informational quantitative research · Forward outcomes · No orders placed</span>
+        </div>
+
+        <!-- Section intro -->
+        <div class="page-intro">
+          <div class="eyebrow">AnkQuant / Quantitative Research</div>
+          <h1>Evidence & statistics</h1>
+          <p>Statistical distribution of forward signal outcomes, horizon returns, and simulated paper execution metrics.</p>
+        </div>
+
+        <!-- Status announcement -->
+        <p id="page-status" role="status" aria-live="polite"></p>
+
+        <!-- Statistical disclaimer note -->
+        <aside class="stats-notice" aria-label="Statistical methodology notice">
+          <div class="stats-notice-icon" aria-hidden="true">ℹ</div>
+          <div>
+            <strong>Every metric shows its own sample size (n).</strong>
+            Groups with sample n &lt; 30 are flagged with confidence notes. Missing observations are excluded from calculations, not counted as zero.
+          </div>
+        </aside>
+
+        <!-- Personal Paper Results Surface -->
+        <section class="stats-card surface" aria-labelledby="personal-results-heading">
+          <div class="stats-card-header">
+            <div>
+              <h2 id="personal-results-heading">My personal paper results</h2>
+              <p>Performance aggregates from your private simulated trades logged in My paper journal.</p>
+            </div>
+          </div>
+          <div id="my-stats" aria-live="polite">
+            <p style="color:var(--dim);font-size:13px;">Loading your results…</p>
+          </div>
+        </section>
+
+        <!-- Shared Forward Evidence Surface -->
+        <section class="stats-card surface" aria-labelledby="evidence-heading">
+          <div class="stats-card-header">
+            <div>
+              <h2 id="evidence-heading">Shared signal evidence</h2>
+              <p>Forward outcomes for journaled setups evaluated across multiple sessions. Distinct from personal trades.</p>
+            </div>
+          </div>
+
+          <div id="evidence-coverage">Loading coverage…</div>
+
+          <!-- Controls Toolbar -->
+          <div class="controls stats-controls-bar" role="search" aria-label="Filter evidence outcomes">
+            <label>
+              Group by
+              <select id="stats-group">
+                <option value="byMode">Mode</option>
+                <option value="byLabel">Signal label</option>
+                <option value="byConfluence">Confluence</option>
+                <option value="bySector">Sector</option>
+              </select>
+            </label>
+
+            <label>
+              Observation
+              <select id="stats-horizon">
+                <option value="result">First touch / final result</option>
+                <option value="eod">Intraday end of day</option>
+                <option value="1">Swing +1 session</option>
+                <option value="3">Swing +3 sessions</option>
+                <option value="5">Swing +5 sessions</option>
+              </select>
+            </label>
+
+            <label>
+              Metric
+              <select id="stats-metric">
+                <option value="returnR">Return in R</option>
+                <option value="returnPct">Return %</option>
+                <option value="mfeR">Maximum favourable excursion (R)</option>
+                <option value="maeR">Maximum adverse excursion (R)</option>
+              </select>
+            </label>
+
+            <button type="button" id="refresh-stats" class="refresh" style="align-self:flex-end;">
+              ↻ Refresh
+            </button>
+          </div>
+
+          <p id="stats-description" class="muted"></p>
+
+          <!-- Evidence Data Table -->
+          <div class="table-scroll stats-table-wrap">
+            <table>
+              <caption class="sr-only">Paper evidence by selected group</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Group</th>
+                  <th scope="col">Eligible</th>
+                  <th scope="col">Sample n</th>
+                  <th scope="col">Mean</th>
+                  <th scope="col">Confidence note</th>
+                </tr>
+              </thead>
+              <tbody id="stats-rows"></tbody>
+            </table>
+          </div>
+
+          <p id="stats-empty" role="status"></p>
+        </section>
+
+      </main>
+
+      <!-- Footer -->
+      <footer style="margin-top:36px;padding:24px 0;border-top:1px solid var(--line);color:var(--dim);font-size:12px;">
+        Paper results exclude slippage and fees. Research observations are not broker fills.
+      </footer>
+    </div><!-- .page-shell -->
+  </body>
+</html>

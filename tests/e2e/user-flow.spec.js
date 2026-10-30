@@ -30,3 +30,22 @@ test('admin can prepare Upstox data, inspect exclusions and import an NSE report
  await page.getByRole('button',{name:'Prepare universe and compare'}).click();await expect(page.locator('#upstox-status')).toContainText('review-required');await expect(page.locator('#upstox-report')).toContainText('SPLITTEST');expect(starts).toBe(1);
  await page.getByText('If NSE blocks the server download',{exact:true}).click();const form=page.locator('#upstox-report-form');await form.locator('[name=reportDate]').fill('2026-10-29');await form.locator('[name=reportFile]').setInputFiles({name:'PR291026.zip',mimeType:'application/zip',buffer:Buffer.from('fixture; parser tested separately')});await form.locator('[name=attested]').check();await page.getByRole('button',{name:'Import NSE report',exact:true}).click();await expect(page.locator('#account-status')).toContainText('NSE report imported');expect(imports).toBe(1);await expect(page.locator('#upstox-import-status')).toContainText('NSE report imported');await page.route('**/api/account/admin/upstox/report',route=>route.fulfill({status:409,contentType:'application/json',body:JSON.stringify({error:'UPSTOX_METADATA_VALUE_OR_UNIT_INVALID'})}));await page.getByRole('button',{name:'Import NSE report',exact:true}).click();await expect(page.locator('#upstox-import-status')).toContainText('UPSTOX_METADATA_VALUE_OR_UNIT_INVALID');expect(errors).toEqual([]);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
+
+
+test('redesigned workspace navigation and motion preference work on every page',async({page})=>{
+ await login(page);
+ const motion=page.locator('.motion-toggle');
+ await motion.click();
+ await expect(page.locator('body')).toHaveClass(/motion-paused/);
+ await page.reload();
+ await expect(page.locator('.motion-toggle')).toHaveAttribute('aria-pressed','true');
+ for(const route of ['/app','/journal','/symbol','/alerts','/stats','/personal']) {
+  await page.goto(base+route);
+  await expect(page.locator('#main-content')).toBeVisible();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ }
+ await page.emulateMedia({reducedMotion:'reduce'});
+ await expect(page.locator('.motion-toggle')).toBeDisabled();
+ await expect(page.locator('body')).toHaveClass(/motion-paused/);
+ await expect(page.locator('#upstox-panel')).toBeHidden();
+});

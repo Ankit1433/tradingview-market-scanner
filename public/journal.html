@@ -3,572 +3,995 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#080b11" />
+    <meta name="theme-color" content="#07090f" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="AnkQuant" />
     <title>AnkQuant — Signal Journal</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icons/market-scanner-192.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-    <style>
-      :root {
-        color-scheme: dark;
-        --bg: #080b11;
-        --panel: #0e141e;
-        --panel-2: #111a26;
-        --line: rgba(255,255,255,.085);
-        --line-2: rgba(255,255,255,.14);
-        --text: #f3f6fb;
-        --muted: #8e9bad;
-        --dim: #657286;
-        --green: #6ee7ac;
-        --red: #ff7d89;
-        --blue: #7bcfff;
-        --amber: #f4ca72;
-        --mono: "IBM Plex Mono", ui-monospace, monospace;
-        --sans: "DM Sans", system-ui, sans-serif;
-      }
-      * { box-sizing: border-box; }
-      body { margin: 0; min-height: 100vh; color: var(--text); font: 14px/1.5 var(--sans); background: radial-gradient(ellipse at 12% -16%, rgba(63,173,126,.14), transparent 34%), var(--bg); }
-      button, input, select { font: inherit; }
-      button, a { -webkit-tap-highlight-color: transparent; }
-      a { color: inherit; text-decoration: none; }
-      .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
-      .shell { width: min(1480px, calc(100% - 36px)); margin: 0 auto; padding: 18px 0 48px; }
-      .topbar { min-height: 62px; display: flex; align-items: center; gap: 18px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 15px; background: rgba(11,15,22,.87); position: sticky; top: 12px; z-index: 5; }
-      .brand { display: flex; align-items: center; gap: 11px; white-space: nowrap; }
-      .brand-mark { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 11px; color: var(--green); font-weight: 800; background: #13251e; border: 1px solid rgba(110,231,172,.2); }
-      .brand-name { font-weight: 700; letter-spacing: -.02em; }
-      .brand-caption { color: var(--dim); font-size: 11px; margin-top: 1px; }
-      .nav { display: flex; align-items: center; gap: 5px; margin-right: auto; }
-      .nav a { padding: 8px 12px; border-radius: 9px; color: var(--muted); font-size: 13px; }
-      .nav a.active { color: var(--text); background: rgba(255,255,255,.07); }
-      .feed-status { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font: 11px var(--mono); }
-      .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--dim); }
-      .dot.good { background: var(--green); box-shadow: 0 0 12px rgba(110,231,172,.45); }
-      .dot.warn { background: var(--amber); }
-      .intro { display: flex; align-items: end; justify-content: space-between; gap: 18px; margin: 32px 2px 18px; }
-      .eyebrow { color: var(--green); text-transform: uppercase; letter-spacing: .12em; font: 10px var(--mono); }
-      h1 { margin: 5px 0 4px; font-size: clamp(27px, 3vw, 37px); line-height: 1.1; letter-spacing: -.045em; }
-      .intro p { margin: 0; color: var(--muted); }
-      .button { min-height: 38px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 12px; border: 1px solid var(--line-2); border-radius: 9px; color: var(--text); background: var(--panel-2); cursor: pointer; }
-      .button:hover { border-color: rgba(110,231,172,.38); }
-      .button.primary { color: #07110c; background: var(--green); border-color: var(--green); font-weight: 700; }
-      .button:disabled { opacity: .45; cursor: not-allowed; }
-      .actions { display: flex; gap: 8px; }
-      .metrics { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 11px; margin-bottom: 15px; }
-      .metric { min-height: 88px; padding: 13px 15px; border: 1px solid var(--line); border-radius: 13px; background: linear-gradient(150deg, rgba(18,26,38,.94), rgba(12,17,25,.94)); }
-      .metric-label { color: var(--muted); font-size: 12px; }
-      .metric-value { margin-top: 5px; font: 600 24px/1.1 var(--mono); letter-spacing: -.04em; }
-      .metric-note { margin-top: 5px; color: var(--dim); font-size: 11px; }
-      .layout { display: grid; grid-template-columns: minmax(0,1fr) 315px; gap: 14px; align-items: start; }
-      .panel { min-width: 0; border: 1px solid var(--line); border-radius: 14px; background: rgba(13,19,28,.94); overflow: hidden; }
-      .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 15px 17px; border-bottom: 1px solid var(--line); }
-      .panel-title { margin: 0; font-size: 14px; font-weight: 650; }
-      .panel-meta { color: var(--dim); font: 11px var(--mono); }
-      .filters { display: grid; grid-template-columns: minmax(160px,1.2fr) minmax(120px,.7fr) minmax(145px,1fr) minmax(120px,.7fr) minmax(120px,.7fr) auto; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
-      .control { min-width: 0; }
-      .control label { display: block; margin-bottom: 4px; color: var(--dim); font-size: 10px; }
-      .input, .select { width: 100%; min-height: 36px; padding: 0 9px; border: 1px solid var(--line); border-radius: 8px; outline: none; color: var(--text); background: #0b1119; }
-      .input:focus, .select:focus { border-color: rgba(110,231,172,.48); }
-      .toggle { display: flex; align-items: end; padding-bottom: 2px; }
-      .check-label { min-height: 36px; display: flex; align-items: center; gap: 7px; padding: 0 8px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); white-space: nowrap; font-size: 11px; cursor: pointer; }
-      .check-label input { accent-color: var(--green); margin: 0; }
-      .table-wrap { overflow: auto; max-height: min(67vh, 740px); }
-      table { width: 100%; border-collapse: collapse; text-align: left; white-space: nowrap; }
-      th { position: sticky; top: 0; z-index: 1; padding: 10px 12px; color: var(--dim); background: #101722; font: 10px var(--mono); text-transform: uppercase; letter-spacing: .06em; }
-      td { padding: 11px 12px; border-top: 1px solid rgba(255,255,255,.055); vertical-align: middle; }
-      tbody tr { cursor: pointer; transition: background .15s ease; }
-      tbody tr:hover, tbody tr.selected { background: rgba(110,231,172,.055); }
-      tbody tr.selected { box-shadow: inset 2px 0 var(--green); }
-      .symbol { font-weight: 700; }
-      .time { color: var(--muted); font: 11px var(--mono); }
-      .mode { display: inline-flex; padding: 3px 7px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 10px; text-transform: capitalize; }
-      .tags { display: flex; flex-wrap: wrap; gap: 4px; max-width: 300px; white-space: normal; }
-      .tag { display: inline-flex; padding: 3px 7px; border: 1px solid rgba(123,207,255,.2); border-radius: 999px; color: var(--blue); background: rgba(123,207,255,.06); font-size: 10px; line-height: 1.25; }
-      .tag.strong { color: var(--green); border-color: rgba(110,231,172,.24); background: rgba(110,231,172,.07); }
-      .level-cell { color: var(--muted); font: 11px var(--mono); }
-      .green { color: var(--green); }
-      .red { color: var(--red); }
-      .empty { min-height: 240px; display: grid; place-content: center; text-align: center; padding: 25px; color: var(--muted); }
-      .empty b { display: block; margin-bottom: 5px; color: var(--text); font-size: 14px; }
-      .detail { position: sticky; top: 92px; }
-      .detail-body { padding: 17px; }
-      .detail-empty { min-height: 330px; display: grid; place-content: center; padding: 24px; text-align: center; color: var(--muted); }
-      .detail-empty b { display: block; color: var(--text); margin: 5px 0; }
-      .detail-symbol { font-size: 20px; font-weight: 700; letter-spacing: -.03em; }
-      .detail-time { color: var(--muted); font: 11px var(--mono); }
-      .detail-price { margin-top: 13px; font: 600 27px/1 var(--mono); letter-spacing: -.05em; }
-      .section-label { margin: 16px 0 8px; color: var(--dim); font: 10px var(--mono); text-transform: uppercase; letter-spacing: .08em; }
-      .signal-list { display: flex; flex-wrap: wrap; gap: 5px; }
-      .detail-note { padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: rgba(255,255,255,.02); color: var(--muted); font-size: 11px; }
-      .detail-note strong { color: var(--text); }
-      .levels { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; }
-      .level { min-width: 0; padding: 9px 7px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,.018); }
-      .level span { display: block; color: var(--dim); font-size: 10px; }
-      .level b { display: block; margin-top: 4px; font: 11px var(--mono); }
-      .level.entry b { color: var(--blue); }
-      .level.stop b { color: var(--red); }
-      .level.target b { color: var(--green); }
-      .context-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
-      .context-item { padding: 8px; border-radius: 8px; background: rgba(255,255,255,.025); }
-      .context-item span { display: block; color: var(--dim); font-size: 10px; }
-      .context-item b { display: block; margin-top: 3px; font: 11px var(--mono); }
-      .chart-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 16px; }
-      .chart-intervals { display: flex; gap: 4px; }
-      .chart-interval { padding: 4px 7px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); background: transparent; font: 10px var(--mono); cursor: pointer; }
-      .chart-interval.active { color: var(--green); border-color: rgba(110,231,172,.35); background: rgba(110,231,172,.07); }
-      .chart { min-height: 180px; margin-top: 8px; padding: 7px 5px 3px; border: 1px solid var(--line); border-radius: 9px; background: rgba(4,8,13,.45); overflow: hidden; }
-      .chart svg { display: block; width: 100%; height: auto; }
-      .chart-loading, .chart-error { min-height: 166px; display: grid; place-content: center; padding: 16px; text-align: center; color: var(--dim); font-size: 11px; }
-      .chart-error { color: var(--amber); }
-      .chart-legend { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 7px; color: var(--muted); font: 10px var(--mono); }
-      .chart-legend span { display: inline-flex; align-items: center; gap: 5px; }
-      .chart-key { width: 8px; height: 8px; border-radius: 50%; }
-      .chart-note { margin-top: 5px; color: var(--dim); font-size: 10px; }
-      .source-note { margin: 12px 3px 0; color: var(--dim); font-size: 11px; }
-      .site-footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 20px; padding: 14px 3px 0; border-top: 1px solid var(--line); color: var(--dim); font-size: 11px; }
-      .footer-links { display: flex; flex-wrap: wrap; gap: 14px; }
-      .footer-links a { color: var(--muted); }
-      .footer-links a:hover { color: var(--green); }
-      @media (max-width: 1080px) { .layout { grid-template-columns: minmax(0,1fr) 285px; } .filters { grid-template-columns: repeat(3,minmax(0,1fr)); } }
-      @media (max-width: 800px) { .layout { grid-template-columns: 1fr; } .detail { position: static; } .detail-empty { min-height: 180px; } .topbar { position: static; flex-wrap: wrap; } .feed-status { margin-left: auto; } }
-      @media (max-width: 560px) { .shell { width: min(100% - 22px, 1480px); padding-top: 10px; } .brand-caption { display: none; } .nav { margin-left: auto; } .nav a { padding: 7px 8px; font-size: 12px; } .intro { align-items: flex-start; flex-wrap: wrap; margin-top: 24px; } .intro p { font-size: 12px; } .actions { width: 100%; } .actions .button { flex: 1; min-height: 36px; padding: 0 9px; font-size: 11px; } .metrics { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; } .metric { min-height: 77px; padding: 11px; } .metric-value { font-size: 21px; } .filters { grid-template-columns: 1fr 1fr; } .filters .symbol-filter { grid-column: 1 / -1; } .filters .toggle { grid-column: 1 / -1; } .panel-head { padding: 13px; } td, th { padding-left: 9px; padding-right: 9px; } }
-      @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; } }
-    </style>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,750&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/assets/workspace.css" />
+    <style>
+      /* ── Journal-specific styles ─────────────────────── */
+      .filters {
+        display: grid;
+        grid-template-columns: minmax(160px, 1.2fr) minmax(110px, 0.7fr) minmax(140px, 1fr) minmax(125px, 0.7fr) minmax(125px, 0.7fr) auto;
+        gap: 10px;
+        padding: 14px 18px;
+        border-bottom: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.012);
+        align-items: end;
+      }
+      .control { min-width: 0; }
+      .control label {
+        display: block;
+        margin-bottom: 5px;
+        color: var(--dim);
+        font: 700 10px var(--mono);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      .control .input, .control .select {
+        width: 100%;
+        min-height: 36px;
+        padding: 0 10px;
+        border: 1px solid var(--line-2);
+        border-radius: var(--r-sm);
+        background: var(--bg-raised);
+        color: var(--text);
+        outline: none;
+        transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
+      }
+      .control .input:focus, .control .select:focus {
+        border-color: var(--green-border);
+        box-shadow: 0 0 0 3px rgba(61,214,140,0.08);
+      }
+      .toggle { display: flex; align-items: flex-end; padding-bottom: 2px; }
+      .check-label {
+        min-height: 36px;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 0 10px;
+        border: 1px solid var(--line-2);
+        border-radius: var(--r-sm);
+        color: var(--muted);
+        background: var(--bg-raised);
+        white-space: nowrap;
+        font: 600 11px var(--sans);
+        cursor: pointer;
+        transition: color var(--t-fast), border-color var(--t-fast);
+      }
+      .check-label:hover { color: var(--text); border-color: var(--line-3); }
+      .check-label input { accent-color: var(--green); margin: 0; }
+
+      /* Table column styling */
+      .time { color: var(--muted); font: 11px var(--mono); white-space: nowrap; }
+      .mode {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 7px;
+        border: 1px solid var(--line-2);
+        border-radius: 999px;
+        color: var(--muted);
+        font: 600 10px var(--mono);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        background: rgba(255,255,255,0.02);
+      }
+      .tags { display: flex; flex-wrap: wrap; gap: 4px; max-width: 280px; white-space: normal; }
+      .level-cell { color: var(--muted); font: 12px var(--mono); }
+
+      /* Detail panel */
+      .detail-symbol { font: 700 22px/1 var(--sans); letter-spacing: -0.04em; color: var(--text); }
+      .detail-time { color: var(--muted); font: 11px var(--mono); margin-top: 4px; }
+      .detail-price { margin-top: 14px; font: 700 28px/1 var(--mono); letter-spacing: -0.05em; color: var(--text); }
+
+      /* Intervals switcher */
+      .chart-intervals { display: flex; gap: 4px; }
+      .chart-interval {
+        padding: 4px 8px;
+        border: 1px solid var(--line-2);
+        border-radius: var(--r-xs);
+        color: var(--muted);
+        background: transparent;
+        font: 600 10px var(--mono);
+        cursor: pointer;
+        transition: color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
+      }
+      .chart-interval:hover { color: var(--text); border-color: var(--line-3); }
+      .chart-interval.active {
+        color: var(--green);
+        border-color: var(--green-border);
+        background: var(--green-dim);
+      }
+
+      /* Chart legend */
+      .chart-legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 14px;
+        margin-top: 8px;
+        color: var(--muted);
+        font: 11px var(--mono);
+      }
+      .chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
+      .chart-key { width: 8px; height: 8px; border-radius: 50%; }
+      .chart-note { margin-top: 6px; color: var(--dim); font-size: 11px; line-height: 1.5; }
+
+      /* Context grid */
+      .context-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+        margin-top: 8px;
+      }
+      .context-item {
+        padding: 8px 10px;
+        border: 1px solid var(--line);
+        border-radius: var(--r-sm);
+        background: rgba(255,255,255,0.02);
+      }
+      .context-item span {
+        display: block;
+        color: var(--dim);
+        font: 700 9px var(--mono);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      .context-item b {
+        display: block;
+        margin-top: 3px;
+        font: 600 12px var(--mono);
+        color: var(--text);
+      }
+
+      /* Evidence panel */
+      .evidence-panel {
+        margin-top: 24px;
+        border-color: rgba(108,180,245,0.22);
+      }
+      .evidence-panel .panel-head {
+        background: linear-gradient(90deg, rgba(108,180,245,0.06) 0%, transparent 80%);
+      }
+      .evidence-panel .panel-title { color: var(--blue); }
+
+      /* Skeleton animation */
+      .skel-row td { padding: 13px 16px; }
+      .skel {
+        display: inline-block;
+        height: 12px;
+        border-radius: 4px;
+        background: linear-gradient(90deg, var(--panel-2) 25%, var(--panel-3) 50%, var(--panel-2) 75%);
+        background-size: 200% 100%;
+        animation: skel-shimmer 1.4s ease-in-out infinite;
+      }
+      @keyframes skel-shimmer {
+        0%   { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
+      }
+      body.motion-paused .skel { animation: none; }
+
+      /* Responsive filters */
+      @media (max-width: 1120px) {
+        .filters { grid-template-columns: repeat(3, 1fr); }
+      }
+      @media (max-width: 720px) {
+        .filters { grid-template-columns: 1fr 1fr; }
+        .filters .symbol-filter { grid-column: 1 / -1; }
+        .filters .toggle { grid-column: 1 / -1; }
+      }
+      @media (max-width: 540px) {
+        .filters { grid-template-columns: 1fr; }
+      }
+    </style>
     <script src="/assets/workspace.js" defer></script>
   </head>
+
   <body>
     <a class="skip-link" href="#main-content">Skip to workspace</a>
+
     <div class="shell">
-      <header class="topbar">
-        <a class="brand" href="/" aria-label="AnkQuant home"><div class="brand-mark">AQ</div><div><div class="brand-name">AnkQuant</div><div class="brand-caption">NSE · Research workspace</div></div></a>
+      <!-- ── Top navigation bar ──────────────────────── -->
+      <header class="topbar" role="banner">
+        <a class="brand" href="/" aria-label="AnkQuant home">
+          <div class="brand-mark" aria-hidden="true">AQ</div>
+          <div>
+            <div class="brand-name">AnkQuant</div>
+            <div class="brand-caption">NSE · Research workspace</div>
+          </div>
+        </a>
+
         <nav class="nav" aria-label="Main navigation">
           <a href="/">Scanner</a>
           <a class="active" href="/journal" aria-current="page">Journal</a>
-          <a href="/symbol">Symbol</a><a href="/alerts">Alerts</a><a href="/stats">Stats</a><a href="/personal">My paper journal</a>
+          <a href="/symbol">Symbol</a>
+          <a href="/alerts">Alerts</a>
+          <a href="/stats">Stats</a>
+          <a href="/personal">Paper journal</a>
         </nav>
-        <div class="feed-status"><i class="dot" id="feed-dot"></i><span id="feed-status">Connecting live updates</span></div>
+
+        <div class="top-status" role="status" aria-label="Live updates status">
+          <span class="pill" id="feed-pill">
+            <i class="dot" id="feed-dot" aria-hidden="true"></i>
+            <span id="feed-status">Connecting live updates…</span>
+          </span>
+        </div>
+
         <button class="motion-toggle" type="button" aria-label="Pause decorative animations" aria-pressed="false">Motion on</button>
       </header>
 
+      <!-- ── Main content ────────────────────────────── -->
       <main id="main-content" tabindex="-1">
-        <div class="paper-banner"><span class="paper-badge">PAPER RESEARCH</span><span>Informational setups · No orders placed</span></div>
-        <section class="intro">
-          <div><div class="eyebrow">ANKQUANT / RESEARCH LIBRARY</div><h1>Signal journal</h1><p>Search recorded setups, inspect their context, and export the filtered rows.</p></div>
-          <div class="actions"><button class="button" id="clear-filters" type="button">Clear filters</button><button class="button" id="refresh" type="button">↻ Refresh</button><button class="button primary" id="export" type="button" disabled>↓ Export CSV</button></div>
+
+        <!-- Research disclaimer -->
+        <div class="paper-banner" role="note">
+          <span class="paper-badge">PAPER RESEARCH</span>
+          <span>Informational setups · No orders placed · Historical observations</span>
+        </div>
+
+        <!-- Section intro -->
+        <section class="intro" aria-label="Journal controls">
+          <div>
+            <div class="eyebrow">AnkQuant / Research Library</div>
+            <h1>Signal journal</h1>
+            <p>Search recorded setups, inspect their multi-indicator confluence, and export filtered rows.</p>
+          </div>
+          <div class="intro-actions">
+            <button class="refresh" id="clear-filters" type="button" aria-label="Clear all filters">Clear filters</button>
+            <button class="refresh" id="refresh" type="button" aria-label="Refresh journal records">
+              <span aria-hidden="true">↻</span> Refresh
+            </button>
+            <button class="btn primary" id="export" type="button" disabled aria-label="Export filtered signals to CSV">
+              <span aria-hidden="true">↓</span> Export CSV
+            </button>
+          </div>
         </section>
 
-<section class="metrics" aria-label="Journal summary">
-          <article class="metric"><div class="metric-label">Matching records</div><div class="metric-value" id="metric-total">—</div><div class="metric-note">From the latest journal window</div></article>
-          <article class="metric"><div class="metric-label">Confluence</div><div class="metric-value" id="metric-confluence">—</div><div class="metric-note">Gate-cleared records in view</div></article>
-          <article class="metric"><div class="metric-label">Intraday</div><div class="metric-value" id="metric-intraday">—</div><div class="metric-note">Records in current view</div></article>
-          <article class="metric"><div class="metric-label">Swing</div><div class="metric-value" id="metric-swing">—</div><div class="metric-note">Records in current view</div></article>
+        <!-- KPI summary row -->
+        <section class="metrics" aria-label="Journal summary metrics">
+          <article class="metric">
+            <div class="metric-label">Matching records</div>
+            <div class="metric-value mono" id="metric-total">—</div>
+            <div class="metric-note">From the latest journal window</div>
+          </article>
+          <article class="metric">
+            <div class="metric-label">Confluence setups</div>
+            <div class="metric-value mono" id="metric-confluence">—</div>
+            <div class="metric-note">Cleared the signal gate</div>
+          </article>
+          <article class="metric">
+            <div class="metric-label">Intraday signals</div>
+            <div class="metric-value mono" id="metric-intraday">—</div>
+            <div class="metric-note">5-minute momentum records</div>
+          </article>
+          <article class="metric">
+            <div class="metric-label">Swing signals</div>
+            <div class="metric-value mono" id="metric-swing">—</div>
+            <div class="metric-note">Daily multi-session records</div>
+          </article>
         </section>
 
-        <section class="layout">
-          <div class="panel">
-            <div class="panel-head"><div><h2 class="panel-title">Recorded signals</h2><div class="panel-meta" id="window-meta">Loading recent journal…</div></div><div class="panel-meta mono" id="result-count">—</div></div>
-            <div class="filters">
-              <div class="control symbol-filter"><label for="symbol">Symbol</label><input class="input" id="symbol" type="search" placeholder="e.g. RELIANCE" autocomplete="off" /></div>
-              <div class="control"><label for="mode">Mode</label><select class="select" id="mode"><option value="">All modes</option><option value="intraday">Intraday</option><option value="swing">Swing</option></select></div>
-              <div class="control"><label for="type">Signal type</label><select class="select" id="type"><option value="">All signal types</option><option>PULLBACK</option><option>ORB BREAKOUT</option><option>MOMENTUM</option><option>VOLUME SPIKE</option><option>VWAP RECLAIM</option><option>NO-PULLBACK RUNNER</option><option>AFTERNOON BREAKOUT</option><option>BASE BREAKOUT</option><option>MA PULLBACK</option><option>52W HIGH</option><option>VOLUME DRYUP</option><option>RS LEADER</option><option>MA STACK</option></select></div>
-              <div class="control"><label for="from-date">From date</label><input class="input" id="from-date" type="date" /></div>
-              <div class="control"><label for="to-date">To date</label><input class="input" id="to-date" type="date" /></div>
-              <div class="toggle"><label class="check-label"><input id="confluence-only" type="checkbox" /> Confluence only</label></div>
+        <!-- Main workspace: table + detail -->
+        <section class="layout" aria-label="Signal journal layout">
+
+          <!-- Left: records table -->
+          <div class="panel" role="region" aria-label="Recorded signals">
+            <div class="panel-head">
+              <div>
+                <h2 class="panel-title">Recorded signals</h2>
+                <div class="panel-meta" id="window-meta">Loading recent journal…</div>
+              </div>
+              <div class="panel-meta mono" id="result-count" aria-live="polite">0 records</div>
             </div>
+
+            <div class="filters" role="search" aria-label="Filter journal signals">
+              <div class="control symbol-filter">
+                <label for="symbol">Symbol</label>
+                <input class="input" id="symbol" type="search" placeholder="e.g. RELIANCE" autocomplete="off" />
+              </div>
+              <div class="control">
+                <label for="mode">Mode</label>
+                <select class="select" id="mode">
+                  <option value="">All modes</option>
+                  <option value="intraday">Intraday</option>
+                  <option value="swing">Swing</option>
+                </select>
+              </div>
+              <div class="control">
+                <label for="type">Signal type</label>
+                <select class="select" id="type">
+                  <option value="">All signal types</option>
+                  <option>PULLBACK</option>
+                  <option>ORB BREAKOUT</option>
+                  <option>MOMENTUM</option>
+                  <option>VOLUME SPIKE</option>
+                  <option>VWAP RECLAIM</option>
+                  <option>NO-PULLBACK RUNNER</option>
+                  <option>AFTERNOON BREAKOUT</option>
+                  <option>BASE BREAKOUT</option>
+                  <option>MA PULLBACK</option>
+                  <option>52W HIGH</option>
+                  <option>VOLUME DRYUP</option>
+                  <option>RS LEADER</option>
+                  <option>MA STACK</option>
+                </select>
+              </div>
+              <div class="control">
+                <label for="from-date">From date</label>
+                <input class="input" id="from-date" type="date" />
+              </div>
+              <div class="control">
+                <label for="to-date">To date</label>
+                <input class="input" id="to-date" type="date" />
+              </div>
+              <div class="toggle">
+                <label class="check-label">
+                  <input id="confluence-only" type="checkbox" /> Confluence only
+                </label>
+              </div>
+            </div>
+
             <div class="table-wrap">
               <table>
-                <thead><tr><th scope="col">Date / time</th><th scope="col">Symbol</th><th scope="col">Mode</th><th scope="col">Signals</th><th scope="col">Price</th><th scope="col">Entry / stop / target</th></tr></thead>
+                <thead>
+                  <tr>
+                    <th scope="col">Date / time</th>
+                    <th scope="col">Symbol</th>
+                    <th scope="col">Mode</th>
+                    <th scope="col">Signals</th>
+                    <th scope="col">Price</th>
+                    <th scope="col">Entry / Stop / Target</th>
+                  </tr>
+                </thead>
                 <tbody id="signal-rows"></tbody>
               </table>
-              <div class="empty" id="empty"><div><b>Loading signal journal</b>Fetching recent recorded setups.</div></div>
+              <div class="empty" id="empty" aria-live="polite">
+                <div>
+                  <div class="empty-icon" aria-hidden="true">⟳</div>
+                  <b>Loading signal journal</b>
+                  <p>Fetching recent recorded setups.</p>
+                </div>
+              </div>
             </div>
           </div>
 
-          <aside class="panel detail" aria-live="polite">
-            <div class="panel-head"><h2 class="panel-title">Signal details</h2><span class="panel-meta" id="detail-meta">Select a row</span></div>
-            <a id="take-signal" class="button primary" style="margin:16px;display:none" href="/personal">Mark as taken · Paper</a><div id="detail"><div class="detail-empty"><div><b>Select a signal</b>Choose a journal row to inspect its recorded setup and market context.</div></div></div>
+          <!-- Right: detail panel -->
+          <aside class="panel detail" aria-live="polite" aria-label="Selected signal details">
+            <div class="panel-head">
+              <h2 class="panel-title">Signal details</h2>
+              <span class="panel-meta" id="detail-meta">Select a row</span>
+            </div>
+            <div style="padding:16px 20px 0;">
+              <a id="take-signal" class="btn primary" style="width:100%;display:none;justify-content:center;" href="/personal">
+                Mark as taken · Paper
+              </a>
+            </div>
+            <div id="detail">
+              <div class="detail-empty">
+                <div>
+                  <div class="icon" aria-hidden="true">⌖</div>
+                  <b>Select a signal</b>
+                  <p>Choose a journal row to inspect its recorded setup and market context.</p>
+                </div>
+              </div>
+            </div>
           </aside>
+
         </section>
+
+        <!-- Forward evidence panel -->
         <section class="panel evidence-panel" aria-labelledby="evidence-title">
-<h2 id="evidence-title">Paper evidence — no slippage or fees</h2>
-<p>Forward signal outcomes, separate from personal trades. Each label group may contain the same signal.</p>
-<label for="evidence-group">Group by</label>
-<select id="evidence-group"><option value="byMode">Mode</option><option value="byLabel">Signal label</option><option value="byConfluence">Confluence</option><option value="bySector">Sector</option></select>
-<div id="evidence-status" role="status">Loading evidence…</div>
-<div class="table-wrap"><table><thead><tr><th>Group</th><th>Eligible</th><th>Completed</th><th>Result sample n</th><th>Mean result R</th><th>Sample warning</th></tr></thead><tbody id="evidence-rows"></tbody></table></div>
-</section>
-<script>
-(function(){let data;const status=document.getElementById('evidence-status');function render(){const body=document.getElementById('evidence-rows');body.replaceChildren();for(const [name,row] of Object.entries(data[document.getElementById('evidence-group').value]||{})){const tr=document.createElement('tr');for(const value of [name,row.eligible,row.completed,row.resultR.n,row.resultR.mean===null?'—':row.resultR.mean.toFixed(2),row.resultR.warning||'—']){const td=document.createElement('td');td.textContent=value;tr.appendChild(td);}body.appendChild(tr);}}
-fetch('/api/public/outcomes/stats').then(r=>{if(!r.ok)throw new Error();return r.json();}).then(value=>{data=value;status.textContent=data.overall.eligible?`${data.overall.pending} pending · ${data.overall.unavailable} unavailable. Small samples (n < 30) are not reliable evidence.`:'No eligible signals have been evaluated yet.';render();}).catch(()=>{status.textContent='Paper evidence is unavailable. Refresh to retry.';});document.getElementById('evidence-group').addEventListener('change',()=>{if(data)render();});})();
-</script>
-        <p class="source-note">The API returns up to 500 recent matches per request. Filters narrow that window; the journal stores more records than this page loads at once.</p>
-        <footer class="site-footer">
-          <span>Market research only · Not financial advice.</span>
-          <nav class="footer-links" aria-label="More AnkQuant pages"><a href="/">Scanner</a><a href="/symbol">Symbol</a><a href="/alerts">Alerts</a><a href="/stats">Stats</a><a href="/personal">My paper journal</a><a href="/api/docs">API docs</a></nav>
-        </footer>
-      </main>
-    </div>
+          <div class="panel-head">
+            <div>
+              <h2 class="panel-title" id="evidence-title">Paper evidence — forward signal outcomes</h2>
+              <div class="panel-meta">Evaluated outcomes without slippage or fees. Groups may overlap.</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <label for="evidence-group" class="sr-only">Group by</label>
+              <select id="evidence-group" class="select" style="min-width:140px;">
+                <option value="byMode">Mode</option>
+                <option value="byLabel">Signal label</option>
+                <option value="byConfluence">Confluence</option>
+                <option value="bySector">Sector</option>
+              </select>
+            </div>
+          </div>
+          <div id="evidence-status" role="status" style="padding:12px 20px;color:var(--dim);font:11px var(--mono);border-bottom:1px solid var(--line);">Loading evidence…</div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Group</th>
+                  <th scope="col">Eligible</th>
+                  <th scope="col">Completed</th>
+                  <th scope="col">Sample n</th>
+                  <th scope="col">Mean return (R)</th>
+                  <th scope="col">Confidence note</th>
+                </tr>
+              </thead>
+              <tbody id="evidence-rows"></tbody>
+            </table>
+          </div>
+        </section>
 
-    <script>
-      (function () {
-        "use strict";
-        var $ = function (id) { return document.getElementById(id); };
-        var records = [];
-        var currentRows = [];
-        var selectedKey = null;
-        var requestId = 0;
-        var eventTimer = null;
-        var chartRequestId = 0;
-        var activeChartKey = null;
-        var renderedDetailKey = null;
-        var chartInterval = "5m";
-
-        function esc(value) {
-          return String(value == null ? "" : value).replace(/[&<>"']/g, function (ch) {
-            return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch];
-          });
-        }
-        function n(value, digits) {
-          var number = Number(value);
-          return value == null || !isFinite(number) ? "—" : number.toFixed(digits == null ? 2 : digits);
-        }
-        function dateKeyIST(timestamp) {
-          var date = new Date(timestamp);
-          if (isNaN(date.getTime())) return "";
-          var parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
-          var part = {};
-          parts.forEach(function (item) { part[item.type] = item.value; });
-          return part.year + "-" + part.month + "-" + part.day;
-        }
-        function displayTime(timestamp) {
-          var date = new Date(timestamp);
-          return isNaN(date.getTime()) ? "—" : date.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) + " IST";
-        }
-        function signalKey(signal) {
-          return [signal.ts, signal.symbol, (signal.signals || []).join(",")].join("|");
-        }
-        function filteredRows() {
-          var query = $("symbol").value.trim().toLowerCase();
-          var from = $("from-date").value;
-          var to = $("to-date").value;
-          return records.filter(function (signal) {
-            if (query && String(signal.symbol || "").toLowerCase().indexOf(query) === -1) return false;
-            var day = dateKeyIST(signal.ts);
-            if (from && day < from) return false;
-            if (to && day > to) return false;
-            return true;
-          });
-        }
-        function tags(signal) {
-          return (signal.signals || []).map(function (label) {
-            return '<span class="tag ' + (signal.confluence ? "strong" : "") + '">' + esc(label) + '</span>';
-          }).join("");
-        }
-        function renderRows() {
-          currentRows = filteredRows();
-          $("result-count").textContent = currentRows.length + (currentRows.length === 1 ? " record" : " records");
-          $("metric-total").textContent = currentRows.length;
-          $("metric-confluence").textContent = currentRows.filter(function (row) { return row.confluence; }).length;
-          $("metric-intraday").textContent = currentRows.filter(function (row) { return row.mode === "intraday"; }).length;
-          $("metric-swing").textContent = currentRows.filter(function (row) { return row.mode === "swing"; }).length;
-          $("export").disabled = currentRows.length === 0;
-          $("empty").style.display = currentRows.length ? "none" : "grid";
-          if (!currentRows.length) {
-            $("signal-rows").innerHTML = "";
-            var anyRecords = records.length > 0;
-            $("empty").innerHTML = anyRecords
-              ? '<div><b>No signals match these filters</b>Try another symbol, date range, or remove the confluence filter.</div>'
-              : '<div><b>No signals recorded yet</b>New journal entries will appear here as the scanner runs.</div>';
-            $("detail").innerHTML = '<div class="detail-empty"><div><b>No matching signal</b>Adjust the filters to see journal details.</div></div>';
-            $("detail-meta").textContent = "No selection";
-            document.getElementById('take-signal').style.display = 'none';
-            selectedKey = null;
-            activeChartKey = null;
-            renderedDetailKey = null;
-            chartRequestId += 1;
-            return;
+        <script>
+        (function () {
+          var data;
+          var status = document.getElementById("evidence-status");
+          function render() {
+            var body = document.getElementById("evidence-rows");
+            body.replaceChildren();
+            var groupEl = document.getElementById("evidence-group");
+            var groupKey = (groupEl && groupEl.value) || "byMode";
+            var rows = Object.entries((data && data[groupKey]) || {});
+            for (var i = 0; i < rows.length; i++) {
+              var name = rows[i][0];
+              var row = rows[i][1];
+              var tr = document.createElement("tr");
+              var values = [
+                name,
+                row.eligible,
+                row.completed,
+                row.resultR ? row.resultR.n : "—",
+                row.resultR && row.resultR.mean !== null ? Number(row.resultR.mean).toFixed(2) + "R" : "—",
+                (row.resultR && row.resultR.warning) || "Sample ≥ 30; not a guarantee"
+              ];
+              for (var j = 0; j < values.length; j++) {
+                var td = document.createElement("td");
+                td.textContent = values[j];
+                if (j === 3 || j === 4) td.className = "mono";
+                if (j === 5 && row.resultR && row.resultR.warning) td.className = "amber";
+                tr.appendChild(td);
+              }
+              body.appendChild(tr);
+            }
           }
-          $("signal-rows").innerHTML = currentRows.map(function (signal, index) {
-            var levels = signal.levels || {};
-            var levelText = levels.entry == null ? "— / — / —" : [levels.entry, levels.stop, levels.target].map(function (value) { return value == null ? "—" : n(value); }).join(" / ");
-            var change = Number(signal.context && signal.context.change);
-            var changeText = signal.context && signal.context.change != null ? '<span class="' + (change > 0 ? 'green' : change < 0 ? 'red' : '') + '">' + (change > 0 ? '+' : '') + n(change) + '%</span>' : '';
-            return '<tr data-index="' + index + '" class="' + (signalKey(signal) === selectedKey ? 'selected' : '') + '" tabindex="0" aria-label="Open signal details for ' + esc(signal.symbol) + '">' +
-              '<td class="time">' + esc(displayTime(signal.ts)) + '</td>' +
-              '<td><span class="symbol">' + esc(signal.symbol) + '</span>' + (changeText ? '<span class="panel-meta"> ' + changeText + '</span>' : '') + '</td>' +
-              '<td><span class="mode">' + esc(signal.mode) + '</span></td>' +
-              '<td><div class="tags">' + tags(signal) + (signal.confluence ? '<span class="tag strong">Confluence</span>' : '') + '</div></td>' +
-              '<td class="mono">' + (signal.price == null ? '—' : '₹' + n(signal.price)) + '</td>' +
-              '<td class="level-cell">' + levelText + '</td>' +
-              '</tr>';
-          }).join("");
-          $("window-meta").textContent = records.length >= 500 ? "Latest 500 matches loaded · narrow filters to inspect a smaller set" : records.length + " recent journal record(s) loaded";
-          var selectedSignal = selectedKey
-            ? currentRows.find(function (row) { return signalKey(row) === selectedKey; })
-            : null;
-          if (!selectedSignal) selectedSignal = currentRows[0];
-          selectedKey = signalKey(selectedSignal);
-          var take = document.getElementById('take-signal');
-          take.style.display = selectedSignal.eventKey ? 'inline-flex' : 'none';
-          take.href = '/personal?' + new URLSearchParams({eventKey:selectedSignal.eventKey || '', entry:selectedSignal.levels?.entry || '', stop:selectedSignal.levels?.stop || '', target:selectedSignal.levels?.target || ''}).toString();
-          if (renderedDetailKey !== selectedKey) renderDetail(selectedSignal);
-        }
-        function contextItem(label, value) {
-          if (value == null || value === "") return "";
-          return '<div class="context-item"><span>' + esc(label) + '</span><b>' + esc(value) + '</b></div>';
-        }
-        function renderDetail(signal) {
-          if (!signal) {
-            $("detail-meta").textContent = "Select a row";
-            $("detail").innerHTML = '<div class="detail-empty"><div><b>Select a signal</b>Choose a journal row to inspect its recorded setup and market context.</div></div>';
-            activeChartKey = null;
-            renderedDetailKey = null;
-            chartRequestId += 1;
-            return;
-          }
-          var key = signalKey(signal);
-          if (activeChartKey !== key) {
-            chartInterval = signal.mode === "swing" ? "1d" : "5m";
-            activeChartKey = key;
-          }
-          renderedDetailKey = key;
-          var levels = signal.levels || {};
-          var context = signal.context || {};
-          $("detail-meta").textContent = displayTime(signal.ts);
-          var levelBlock = levels.entry != null
-            ? '<div class="section-label">Recorded levels</div><div class="levels"><div class="level entry"><span>Entry</span><b>₹' + n(levels.entry) + '</b></div><div class="level stop"><span>Stop</span><b>' + (levels.stop == null ? '—' : '₹' + n(levels.stop)) + '</b></div><div class="level target"><span>Target</span><b>' + (levels.target == null ? '—' : '₹' + n(levels.target)) + '</b></div></div>' + (levels.riskReward == null ? '' : '<div class="detail-note" style="margin-top:7px">Planned reward / risk <strong>' + n(levels.riskReward) + 'R</strong></div>')
-            : '<div class="section-label">Recorded levels</div><div class="detail-note">No structural entry and stop were recorded for this setup.</div>';
-          var contextHtml = [
-            contextItem("Sector", context.sector),
-            contextItem("Day change", context.change == null ? null : (Number(context.change) > 0 ? "+" : "") + n(context.change) + "%"),
-            contextItem("Relative volume", context.relVolume == null ? null : n(context.relVolume, 1) + "×"),
-            contextItem("ATR", context.atr == null ? null : n(context.atr)),
-            contextItem("RSI", context.rsi == null ? null : n(context.rsi, 1)),
-          ].join("");
-          $("detail").innerHTML = '<div class="detail-body"><div class="detail-symbol">' + esc(signal.symbol) + '</div><div class="detail-time">' + esc(displayTime(signal.ts)) + ' · ' + esc(signal.mode) + '</div>' +
-            '<div class="detail-price">' + (signal.price == null ? '—' : '₹' + n(signal.price)) + '</div>' +
-            '<div class="chart-heading"><div class="section-label" style="margin:0">Recent price action</div><div class="chart-intervals" role="group" aria-label="Chart interval">' +
-              '<button class="chart-interval ' + (chartInterval === "5m" ? "active" : "") + '" type="button" data-interval="5m" aria-pressed="' + (chartInterval === "5m") + '">5 min</button>' +
-              '<button class="chart-interval ' + (chartInterval === "1d" ? "active" : "") + '" type="button" data-interval="1d" aria-pressed="' + (chartInterval === "1d") + '">Daily</button>' +
-            '</div></div><div class="chart" id="signal-chart"><div class="chart-loading">Loading price history…</div></div>' +
-            '<div class="chart-legend" id="chart-legend"></div><div class="chart-note">Latest available candles. Dashed lines mark saved setup levels when in range.</div>' +
-            '<div class="section-label">Signals recorded together</div><div class="signal-list">' + tags(signal) + '</div>' +
-            '<div class="detail-note" style="margin-top:9px"><strong>' + (signal.confluence ? 'Confluence gate cleared' : 'Below confluence gate') + '</strong> · ' + esc(signal.signalCount || (signal.signals || []).length) + ' signal(s)</div>' +
-            levelBlock + (contextHtml ? '<div class="section-label">Market context</div><div class="context-grid">' + contextHtml + '</div>' : '') + '</div>';
-          loadChart(signal, chartInterval);
-        }
-        function chartLabel(timestamp, interval) {
-          var date = new Date(Number(timestamp) * 1000);
-          if (isNaN(date.getTime())) return "";
-          return interval === "1d"
-            ? date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", timeZone: "Asia/Kolkata" })
-            : date.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" });
-        }
-        function drawChart(signal, candles, interval) {
-          if (!Array.isArray(candles) || candles.length < 2) return null;
-          var width = 420;
-          var height = 230;
-          var left = 8;
-          var right = 58;
-          var top = 10;
-          var bottom = 26;
-          var plotWidth = width - left - right;
-          var plotHeight = height - top - bottom;
-          var values = [];
-          candles.forEach(function (candle) {
-            ["high", "low"].forEach(function (key) {
-              var value = Number(candle[key]);
-              if (isFinite(value)) values.push(value);
+          fetch("/api/public/outcomes/stats")
+            .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+            .then(function (value) {
+              data = value;
+              status.textContent = data.overall && data.overall.eligible
+                ? data.overall.pending + " pending · " + data.overall.unavailable + " unavailable. Small samples (n < 30) are not statistically reliable."
+                : "No eligible signals have been evaluated yet.";
+              render();
+            })
+            .catch(function () {
+              status.textContent = "Paper evidence is temporarily unavailable. Refresh to retry.";
             });
+          document.getElementById("evidence-group").addEventListener("change", function () {
+            if (data) render();
           });
-          if (values.length < 2) return null;
-          var minPrice = Math.min.apply(null, values);
-          var maxPrice = Math.max.apply(null, values);
-          if (maxPrice === minPrice) {
-            var offset = Math.max(maxPrice * .005, .05);
-            minPrice -= offset;
-            maxPrice += offset;
-          }
-          var range = maxPrice - minPrice;
-          var levels = signal.levels || {};
-          var levelDefs = [
-            { key: "entry", label: "Entry", color: "#7bcfff" },
-            { key: "stop", label: "Stop", color: "#ff7d89" },
-            { key: "target", label: "Target", color: "#6ee7ac" },
-          ].filter(function (level) {
-            var price = Number(levels[level.key]);
-            return levels[level.key] != null && isFinite(price) && price >= minPrice - range * .12 && price <= maxPrice + range * .12;
-          });
-          levelDefs.forEach(function (level) {
-            var price = Number(levels[level.key]);
-            minPrice = Math.min(minPrice, price);
-            maxPrice = Math.max(maxPrice, price);
-          });
-          var pad = (maxPrice - minPrice) * .08 || Math.max(maxPrice * .005, .05);
-          minPrice -= pad;
-          maxPrice += pad;
-          var y = function (price) { return top + ((maxPrice - Number(price)) / (maxPrice - minPrice)) * plotHeight; };
-          var step = plotWidth / candles.length;
-          var bodyWidth = Math.max(1.5, Math.min(8, step * .55));
-          var grid = [];
-          for (var g = 0; g <= 3; g += 1) {
-            var gy = top + plotHeight * g / 3;
-            var price = maxPrice - (maxPrice - minPrice) * g / 3;
-            grid.push('<line x1="' + left + '" y1="' + gy.toFixed(1) + '" x2="' + (width - right + 2) + '" y2="' + gy.toFixed(1) + '" stroke="rgba(255,255,255,.08)" />');
-            grid.push('<text x="' + (width - right + 7) + '" y="' + (gy + 3).toFixed(1) + '" fill="#718096" font-size="10" font-family="IBM Plex Mono, monospace">' + esc(n(price)) + '</text>');
-          }
-          var bars = candles.map(function (candle, index) {
-            var x = left + (index + .5) * step;
-            var openY = y(candle.open);
-            var closeY = y(candle.close);
-            var highY = y(candle.high);
-            var lowY = y(candle.low);
-            var color = Number(candle.close) >= Number(candle.open) ? "#6ee7ac" : "#ff7d89";
-            return '<g><line x1="' + x.toFixed(1) + '" y1="' + highY.toFixed(1) + '" x2="' + x.toFixed(1) + '" y2="' + lowY.toFixed(1) + '" stroke="' + color + '" stroke-width="1"/><rect x="' + (x - bodyWidth / 2).toFixed(1) + '" y="' + Math.min(openY, closeY).toFixed(1) + '" width="' + bodyWidth.toFixed(1) + '" height="' + Math.max(1.3, Math.abs(closeY - openY)).toFixed(1) + '" rx=".5" fill="' + color + '"/></g>';
-          }).join("");
-          var levelLines = levelDefs.map(function (level) {
-            var levelY = y(levels[level.key]);
-            return '<line x1="' + left + '" y1="' + levelY.toFixed(1) + '" x2="' + (width - right + 2) + '" y2="' + levelY.toFixed(1) + '" stroke="' + level.color + '" stroke-width="1" stroke-dasharray="4 3" opacity=".8"/>';
-          }).join("");
-          var timeLabels = [0, Math.floor((candles.length - 1) / 2), candles.length - 1].map(function (index, labelIndex) {
-            var x = left + (index + .5) * step;
-            var anchor = labelIndex === 0 ? "start" : labelIndex === 2 ? "end" : "middle";
-            return '<text x="' + x.toFixed(1) + '" y="' + (height - 6) + '" text-anchor="' + anchor + '" fill="#718096" font-size="9" font-family="IBM Plex Mono, monospace">' + esc(chartLabel(candles[index].time, interval)) + '</text>';
-          }).join("");
-          return {
-            svg: '<svg viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="' + esc(interval === "1d" ? "Daily" : "5-minute") + ' candlestick chart for ' + esc(signal.symbol) + '">' + grid.join("") + levelLines + bars + timeLabels + '</svg>',
-            legend: levelDefs.map(function (level) {
-              return '<span><i class="chart-key" style="background:' + level.color + '"></i>' + esc(level.label) + ' ₹' + n(levels[level.key]) + '</span>';
-            }).join(""),
-          };
+        })();
+        </script>
+
+        <p class="source-note" style="margin:16px 2px 0;color:var(--dim);font-size:11px;">
+          The API returns up to 500 recent matches per request. Filters narrow that window; the database stores the complete signal history.
+        </p>
+
+        <!-- Footer -->
+        <footer class="site-footer">
+          <span>Market research only · Informational paper records · Not broker orders</span>
+          <nav class="footer-links" aria-label="More AnkQuant pages">
+            <a href="/">Scanner</a>
+            <a href="/symbol">Symbol</a>
+            <a href="/alerts">Alerts</a>
+            <a href="/stats">Stats</a>
+            <a href="/personal">Paper journal</a>
+            <a href="/api/docs">API docs</a>
+          </nav>
+        </footer>
+
+      </main>
+    </div><!-- .shell -->
+
+    <!-- Main Journal Controller -->
+    <script>
+    (function () {
+      "use strict";
+
+      var $ = function (id) { return document.getElementById(id); };
+      var records = [];
+      var currentRows = [];
+      var selectedKey = null;
+      var requestId = 0;
+      var eventTimer = null;
+      var chartRequestId = 0;
+      var activeChartKey = null;
+      var renderedDetailKey = null;
+      var chartInterval = "5m";
+
+      function esc(value) {
+        return String(value == null ? "" : value).replace(/[&<>"']/g, function (ch) {
+          return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch];
+        });
+      }
+      function n(value, digits) {
+        var num = Number(value);
+        return value == null || !isFinite(num) ? "—" : num.toFixed(digits == null ? 2 : digits);
+      }
+      function dateKeyIST(timestamp) {
+        var date = new Date(timestamp);
+        if (isNaN(date.getTime())) return "";
+        var parts = new Intl.DateTimeFormat("en-CA", {
+          timeZone: "Asia/Kolkata",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit"
+        }).formatToParts(date);
+        var part = {};
+        parts.forEach(function (item) { part[item.type] = item.value; });
+        return part.year + "-" + part.month + "-" + part.day;
+      }
+      function displayTime(timestamp) {
+        var date = new Date(timestamp);
+        return isNaN(date.getTime())
+          ? "—"
+          : date.toLocaleString("en-IN", {
+              timeZone: "Asia/Kolkata",
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit"
+            }) + " IST";
+      }
+      function signalKey(signal) {
+        return [signal.ts, signal.symbol, (signal.signals || []).join(",")].join("|");
+      }
+      function filteredRows() {
+        var query = $("symbol").value.trim().toLowerCase();
+        var from = $("from-date").value;
+        var to = $("to-date").value;
+        return records.filter(function (signal) {
+          if (query && String(signal.symbol || "").toLowerCase().indexOf(query) === -1) return false;
+          var day = dateKeyIST(signal.ts);
+          if (from && day < from) return false;
+          if (to && day > to) return false;
+          return true;
+        });
+      }
+      function tags(signal) {
+        return (signal.signals || []).map(function (label) {
+          return '<span class="tag ' + (signal.confluence ? "strong" : "") + '">' + esc(label) + "</span>";
+        }).join("");
+      }
+
+      function showSkeleton() {
+        if (records.length) return;
+        var html = "";
+        for (var i = 0; i < 7; i++) {
+          html += '<tr class="skel-row" aria-hidden="true">' +
+            '<td><div class="skel" style="width:110px"></div></td>' +
+            '<td><div class="skel" style="width:75px"></div></td>' +
+            '<td><div class="skel" style="width:45px"></div></td>' +
+            '<td><div class="skel" style="width:130px"></div></td>' +
+            '<td><div class="skel" style="width:60px"></div></td>' +
+            '<td><div class="skel" style="width:120px"></div></td>' +
+            '</tr>';
         }
-        async function loadChart(signal, interval) {
-          var request = ++chartRequestId;
-          var container = $("signal-chart");
-          if (!container) return;
-          var limit = interval === "1d" ? 120 : 60;
-          container.innerHTML = '<div class="chart-loading">Loading ' + (interval === "1d" ? "daily" : "5-minute") + ' candles…</div>';
-          $("chart-legend").innerHTML = "";
-          try {
-            var response = await fetch('/api/public/candles/' + encodeURIComponent(signal.symbol) + '?interval=' + interval + '&limit=' + limit, { headers: { Accept: 'application/json' } });
-            var payload = await response.json();
-            if (request !== chartRequestId || activeChartKey !== signalKey(signal) || chartInterval !== interval) return;
-            if (!response.ok) throw new Error(payload.error || "Price history is unavailable.");
-            var chart = drawChart(signal, payload.candles, interval);
-            if (!chart) throw new Error("No usable candles were returned for this symbol.");
-            container.innerHTML = chart.svg;
-            $("chart-legend").innerHTML = chart.legend;
-          } catch (error) {
-            if (request !== chartRequestId || activeChartKey !== signalKey(signal)) return;
-            container.innerHTML = '<div class="chart-error">' + esc(error.message || "Price history is temporarily unavailable.") + '</div>';
-          }
-        }
-        async function loadRecords() {
-          var id = ++requestId;
-          var params = new URLSearchParams({ limit: "500" });
-          if ($("mode").value) params.set("mode", $("mode").value);
-          if ($("type").value) params.set("type", $("type").value);
-          if ($("confluence-only").checked) params.set("confluenceOnly", "true");
-          $("refresh").disabled = true;
-          $("window-meta").textContent = "Loading journal records…";
-          try {
-            var response = await fetch('/api/public/signals/recent?' + params.toString(), { headers: { Accept: 'application/json' } });
-            var payload = await response.json();
-            if (id !== requestId) return;
-            if (!response.ok) throw new Error(payload.error || 'Journal request failed');
-            records = Array.isArray(payload.signals) ? payload.signals : [];
-            renderRows();
-          } catch (_) {
-            if (id !== requestId) return;
-            records = [];
-            renderRows();
-            $("empty").innerHTML = '<div><b>Could not load signal journal</b>Check the API connection and refresh.</div>';
-            $("window-meta").textContent = "Journal request failed";
-          } finally {
-            if (id === requestId) $("refresh").disabled = false;
-          }
-        }
-        function csvEscape(value) {
-          var text = String(value == null ? "" : value);
-          return '"' + text.replace(/"/g, '""') + '"';
-        }
-        function exportCsv() {
-          if (!currentRows.length) return;
-          var columns = ["timestamp_ist", "symbol", "mode", "signals", "confluence", "price", "entry", "stop", "target", "risk_reward", "sector", "change_pct", "relative_volume"];
-          var lines = [columns.join(",")];
-          currentRows.forEach(function (signal) {
-            var level = signal.levels || {};
-            var context = signal.context || {};
-            var row = [displayTime(signal.ts), signal.symbol, signal.mode, (signal.signals || []).join(" | "), signal.confluence, signal.price, level.entry, level.stop, level.target, level.riskReward, context.sector, context.change, context.relVolume];
-            lines.push(row.map(csvEscape).join(","));
-          });
-          var blob = new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
-          var url = URL.createObjectURL(blob);
-          var link = document.createElement("a");
-          link.href = url;
-          link.download = "scanner-signals-" + new Date().toISOString().slice(0, 10) + ".csv";
-          document.body.appendChild(link);
-          link.click();
-          link.remove();
-          window.setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
-        }
-        function scheduleRefresh() {
-          if (eventTimer) window.clearTimeout(eventTimer);
-          eventTimer = window.setTimeout(loadRecords, 900);
-        }
-        function connectStream() {
-          if (!window.EventSource) { $("feed-status").textContent = "Live updates unavailable"; $("feed-dot").className = "dot warn"; return; }
-          var stream = new EventSource('/api/public/stream');
-          stream.addEventListener('connected', function () { $("feed-status").textContent = "Live updates connected"; $("feed-dot").className = "dot good"; });
-          stream.addEventListener('signal', function (event) {
-            try { if (!JSON.parse(event.data).replay) scheduleRefresh(); } catch (_) { /* ignore malformed stream events */ }
-          });
-          stream.onerror = function () { $("feed-status").textContent = "Reconnecting live updates"; $("feed-dot").className = "dot warn"; };
+        $("signal-rows").innerHTML = html;
+        $("empty").style.display = "none";
+      }
+
+      function renderRows() {
+        currentRows = filteredRows();
+        $("result-count").textContent = currentRows.length + (currentRows.length === 1 ? " record" : " records");
+        $("metric-total").textContent = currentRows.length;
+        $("metric-confluence").textContent = currentRows.filter(function (row) { return row.confluence; }).length;
+        $("metric-intraday").textContent = currentRows.filter(function (row) { return row.mode === "intraday"; }).length;
+        $("metric-swing").textContent = currentRows.filter(function (row) { return row.mode === "swing"; }).length;
+        $("export").disabled = currentRows.length === 0;
+
+        if (!currentRows.length) {
+          $("signal-rows").innerHTML = "";
+          $("empty").style.display = "grid";
+          var anyRecords = records.length > 0;
+          $("empty").innerHTML = anyRecords
+            ? '<div><div class="empty-icon" aria-hidden="true">⌕</div><b>No signals match these filters</b><p>Try another symbol, date range, or clear the confluence toggle.</p></div>'
+            : '<div><div class="empty-icon" aria-hidden="true">◇</div><b>No signals recorded yet</b><p>New journal entries will appear here as the scanner logs setups.</p></div>';
+          $("detail").innerHTML = '<div class="detail-empty"><div><div class="icon" aria-hidden="true">⌖</div><b>No matching signal</b><p>Adjust the filters to see journal setup details.</p></div></div>';
+          $("detail-meta").textContent = "No selection";
+          document.getElementById("take-signal").style.display = "none";
+          selectedKey = null;
+          activeChartKey = null;
+          renderedDetailKey = null;
+          chartRequestId += 1;
+          return;
         }
 
-        ["symbol", "from-date", "to-date"].forEach(function (id) { $(id).addEventListener("input", renderRows); });
-        ["mode", "type", "confluence-only"].forEach(function (id) { $(id).addEventListener("change", loadRecords); });
-        $("refresh").addEventListener("click", loadRecords);
-        $("export").addEventListener("click", exportCsv);
-        $("clear-filters").addEventListener("click", function () {
-          $("symbol").value = "";
-          $("mode").value = "";
-          $("type").value = "";
-          $("from-date").value = "";
-          $("to-date").value = "";
-          $("confluence-only").checked = false;
-          loadRecords();
+        $("empty").style.display = "none";
+
+        $("signal-rows").innerHTML = currentRows.map(function (signal, index) {
+          var levels = signal.levels || {};
+          var levelText = levels.entry == null
+            ? "— / — / —"
+            : [levels.entry, levels.stop, levels.target].map(function (val) { return val == null ? "—" : n(val); }).join(" / ");
+          var change = Number(signal.context && signal.context.change);
+          var changeClass = change > 0 ? "positive" : change < 0 ? "negative" : "neutral";
+          var changeText = signal.context && signal.context.change != null
+            ? '<span class="mono ' + changeClass + '"> ' + (change > 0 ? "+" : "") + n(change) + '%</span>'
+            : "";
+
+          return '<tr data-index="' + index + '" class="' + (signalKey(signal) === selectedKey ? "selected" : "") + '" tabindex="0" aria-label="Open signal details for ' + esc(signal.symbol) + '">' +
+            '<td class="time">' + esc(displayTime(signal.ts)) + "</td>" +
+            '<td><span class="symbol">' + esc(signal.symbol) + "</span>" + changeText + "</td>" +
+            '<td><span class="mode">' + esc(signal.mode) + "</span></td>" +
+            '<td><div class="tags">' + tags(signal) + (signal.confluence ? '<span class="stamp">Confluence</span>' : "") + "</div></td>" +
+            '<td class="price mono">' + (signal.price == null ? "—" : "₹" + n(signal.price)) + "</td>" +
+            '<td class="level-cell mono">' + levelText + "</td>" +
+            "</tr>";
+        }).join("");
+
+        $("window-meta").textContent = records.length >= 500
+          ? "Latest 500 matches loaded · narrow filters to inspect a smaller set"
+          : records.length + " recent journal record(s) loaded";
+
+        var selectedSignal = selectedKey
+          ? currentRows.find(function (row) { return signalKey(row) === selectedKey; })
+          : null;
+        if (!selectedSignal) selectedSignal = currentRows[0];
+        selectedKey = signalKey(selectedSignal);
+
+        var take = document.getElementById("take-signal");
+        take.style.display = selectedSignal.eventKey ? "inline-flex" : "none";
+        take.href = "/personal?" + new URLSearchParams({
+          eventKey: selectedSignal.eventKey || "",
+          entry: (selectedSignal.levels && selectedSignal.levels.entry) || "",
+          stop: (selectedSignal.levels && selectedSignal.levels.stop) || "",
+          target: (selectedSignal.levels && selectedSignal.levels.target) || ""
+        }).toString();
+
+        if (renderedDetailKey !== selectedKey) renderDetail(selectedSignal);
+      }
+
+      function contextItem(label, value) {
+        if (value == null || value === "") return "";
+        return '<div class="context-item"><span>' + esc(label) + "</span><b>" + esc(value) + "</b></div>";
+      }
+
+      function renderDetail(signal) {
+        if (!signal) {
+          $("detail-meta").textContent = "Select a row";
+          $("detail").innerHTML = '<div class="detail-empty"><div><div class="icon" aria-hidden="true">⌖</div><b>Select a signal</b><p>Choose a journal row to inspect its recorded setup and market context.</p></div></div>';
+          activeChartKey = null;
+          renderedDetailKey = null;
+          chartRequestId += 1;
+          return;
+        }
+
+        var key = signalKey(signal);
+        if (activeChartKey !== key) {
+          chartInterval = signal.mode === "swing" ? "1d" : "5m";
+          activeChartKey = key;
+        }
+        renderedDetailKey = key;
+
+        var levels = signal.levels || {};
+        var context = signal.context || {};
+        $("detail-meta").textContent = displayTime(signal.ts);
+
+        var levelBlock = levels.entry != null
+          ? '<div class="divider"></div><div class="section-label">Recorded levels</div>' +
+            '<div class="levels">' +
+              '<div class="level entry"><span>Entry</span><b>₹' + n(levels.entry) + "</b></div>" +
+              '<div class="level stop"><span>Stop</span><b>' + (levels.stop == null ? "—" : "₹" + n(levels.stop)) + "</b></div>" +
+              '<div class="level target"><span>Target</span><b>' + (levels.target == null ? "—" : "₹" + n(levels.target)) + "</b></div>" +
+            "</div>" +
+            (levels.riskReward == null
+              ? ""
+              : '<div class="detail-note" style="margin-top:8px">Planned reward / risk <strong>' + n(levels.riskReward, 2) + "R</strong></div>")
+          : '<div class="divider"></div><div class="section-label">Recorded levels</div><div class="detail-note">No structural entry and stop were recorded for this setup.</div>';
+
+        var contextHtml = [
+          contextItem("Sector", context.sector),
+          contextItem("Day change", context.change == null ? null : (Number(context.change) > 0 ? "+" : "") + n(context.change) + "%"),
+          contextItem("Relative volume", context.relVolume == null ? null : n(context.relVolume, 1) + "×"),
+          contextItem("ATR", context.atr == null ? null : n(context.atr)),
+          contextItem("RSI", context.rsi == null ? null : n(context.rsi, 1)),
+        ].join("");
+
+        $("detail").innerHTML =
+          '<div class="detail-body">' +
+            '<div class="detail-symbol">' + esc(signal.symbol) + '</div>' +
+            '<div class="detail-time">' + esc(displayTime(signal.ts)) + " · " + esc(signal.mode.toUpperCase()) + "</div>" +
+            '<div class="detail-price mono">' + (signal.price == null ? "—" : "₹" + n(signal.price)) + "</div>" +
+            '<div class="divider"></div>' +
+            '<div class="chart-heading">' +
+              '<div class="section-label" style="margin:0">Recent price action</div>' +
+              '<div class="chart-intervals" role="group" aria-label="Chart interval">' +
+                '<button class="chart-interval ' + (chartInterval === "5m" ? "active" : "") + '" type="button" data-interval="5m" aria-pressed="' + (chartInterval === "5m") + '">5m</button>' +
+                '<button class="chart-interval ' + (chartInterval === "1d" ? "active" : "") + '" type="button" data-interval="1d" aria-pressed="' + (chartInterval === "1d") + '">Daily</button>' +
+              "</div>" +
+            "</div>" +
+            '<div class="chart" id="signal-chart"><div class="chart-loading">Loading price history…</div></div>' +
+            '<div class="chart-legend" id="chart-legend"></div>' +
+            '<div class="chart-note">Latest available candles. Dashed lines mark saved setup levels when in range.</div>' +
+            '<div class="divider"></div>' +
+            '<div class="section-label">Signals recorded together</div>' +
+            '<div class="tags">' + tags(signal) + "</div>" +
+            '<div class="detail-note" style="margin-top:10px"><strong>' + (signal.confluence ? "✦ Confluence gate cleared" : "Below confluence gate") + "</strong> · " + esc(signal.signalCount || (signal.signals || []).length) + " signal(s)</div>" +
+            levelBlock +
+            (contextHtml ? '<div class="divider"></div><div class="section-label">Market context</div><div class="context-grid">' + contextHtml + "</div>" : "") +
+          "</div>";
+
+        loadChart(signal, chartInterval);
+      }
+
+      function chartLabel(timestamp, interval) {
+        var date = new Date(Number(timestamp) * 1000);
+        if (isNaN(date.getTime())) return "";
+        return interval === "1d"
+          ? date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", timeZone: "Asia/Kolkata" })
+          : date.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" });
+      }
+
+      function drawChart(signal, candles, interval) {
+        if (!Array.isArray(candles) || candles.length < 2) return null;
+        var width = 380, height = 230;
+        var left = 8, right = 52, top = 10, bottom = 26;
+        var plotWidth = width - left - right;
+        var plotHeight = height - top - bottom;
+        var values = [];
+        candles.forEach(function (c) {
+          ["high", "low"].forEach(function (k) {
+            var val = Number(c[k]);
+            if (isFinite(val)) values.push(val);
+          });
         });
-        $("signal-rows").addEventListener("click", function (event) {
-          var row = event.target.closest("tr[data-index]");
-          if (!row) return;
-          var signal = currentRows[Number(row.dataset.index)];
-          if (!signal) return;
-          selectedKey = signalKey(signal);
+        if (values.length < 2) return null;
+        var minPrice = Math.min.apply(null, values);
+        var maxPrice = Math.max.apply(null, values);
+        if (maxPrice === minPrice) {
+          var offset = Math.max(maxPrice * 0.005, 0.05);
+          minPrice -= offset;
+          maxPrice += offset;
+        }
+        var range = maxPrice - minPrice;
+        var levels = signal.levels || {};
+        var levelDefs = [
+          { key: "entry", label: "Entry", color: "#6cb4f5" },
+          { key: "stop", label: "Stop", color: "#f1687a" },
+          { key: "target", label: "Target", color: "#3dd68c" },
+        ].filter(function (def) {
+          var price = Number(levels[def.key]);
+          return levels[def.key] != null && isFinite(price) && price >= minPrice - range * 0.12 && price <= maxPrice + range * 0.12;
+        });
+
+        levelDefs.forEach(function (def) {
+          var price = Number(levels[def.key]);
+          minPrice = Math.min(minPrice, price);
+          maxPrice = Math.max(maxPrice, price);
+        });
+
+        var pad = (maxPrice - minPrice) * 0.08 || Math.max(maxPrice * 0.005, 0.05);
+        minPrice -= pad;
+        maxPrice += pad;
+        var y = function (price) { return top + ((maxPrice - Number(price)) / (maxPrice - minPrice)) * plotHeight; };
+        var step = plotWidth / candles.length;
+        var bodyWidth = Math.max(1.8, Math.min(8, step * 0.55));
+
+        var grid = [];
+        for (var g = 0; g <= 3; g++) {
+          var gy = top + plotHeight * g / 3;
+          var price = maxPrice - (maxPrice - minPrice) * g / 3;
+          grid.push(
+            '<line x1="' + left + '" y1="' + gy.toFixed(1) + '" x2="' + (width - right + 2) + '" y2="' + gy.toFixed(1) + '" stroke="rgba(255,255,255,0.05)" />',
+            '<text x="' + (width - right + 7) + '" y="' + (gy + 3.5).toFixed(1) + '" fill="#556272" font-size="8.5" font-family="IBM Plex Mono, monospace">' + esc(n(price)) + "</text>"
+          );
+        }
+
+        var bars = candles.map(function (c, index) {
+          var x = left + (index + 0.5) * step;
+          var openY = y(c.open), closeY = y(c.close);
+          var highY = y(c.high), lowY = y(c.low);
+          var rising = Number(c.close) >= Number(c.open);
+          var color = rising ? "#3dd68c" : "#f1687a";
+          return '<g>' +
+            '<line x1="' + x.toFixed(1) + '" y1="' + highY.toFixed(1) + '" x2="' + x.toFixed(1) + '" y2="' + lowY.toFixed(1) + '" stroke="' + color + '" stroke-width="1" opacity="0.8"/>' +
+            '<rect x="' + (x - bodyWidth / 2).toFixed(1) + '" y="' + Math.min(openY, closeY).toFixed(1) + '" width="' + bodyWidth.toFixed(1) + '" height="' + Math.max(1.5, Math.abs(closeY - openY)).toFixed(1) + '" rx="0.8" fill="' + color + '"/>' +
+            "</g>";
+        }).join("");
+
+        var levelLines = levelDefs.map(function (def) {
+          var levelY = y(levels[def.key]);
+          return '<line x1="' + left + '" y1="' + levelY.toFixed(1) + '" x2="' + (width - right + 2) + '" y2="' + levelY.toFixed(1) + '" stroke="' + def.color + '" stroke-width="1" stroke-dasharray="4 3" opacity="0.85"/>';
+        }).join("");
+
+        var timeLabels = [0, Math.floor((candles.length - 1) / 2), candles.length - 1].map(function (index, labelIndex) {
+          var x = left + (index + 0.5) * step;
+          var anchor = labelIndex === 0 ? "start" : labelIndex === 2 ? "end" : "middle";
+          return '<text x="' + x.toFixed(1) + '" y="' + (height - 6) + '" text-anchor="' + anchor + '" fill="#556272" font-size="8.5" font-family="IBM Plex Mono, monospace">' + esc(chartLabel(candles[index].time, interval)) + "</text>";
+        }).join("");
+
+        return {
+          svg: '<svg viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="' + esc(interval === "1d" ? "Daily" : "5-minute") + " candlestick chart for " + esc(signal.symbol) + '">' +
+            grid.join("") + levelLines + bars + timeLabels + "</svg>",
+          legend: levelDefs.map(function (def) {
+            return '<span><i class="chart-key" style="background:' + def.color + '"></i>' + esc(def.label) + " ₹" + n(levels[def.key]) + "</span>";
+          }).join("")
+        };
+      }
+
+      async function loadChart(signal, interval) {
+        var request = ++chartRequestId;
+        var container = $("signal-chart");
+        if (!container) return;
+        var limit = interval === "1d" ? 120 : 60;
+        container.innerHTML = '<div class="chart-loading">Loading ' + (interval === "1d" ? "daily" : "5-minute") + " candles…</div>";
+        $("chart-legend").innerHTML = "";
+
+        try {
+          var response = await fetch("/api/public/candles/" + encodeURIComponent(signal.symbol) + "?interval=" + interval + "&limit=" + limit, {
+            headers: { Accept: "application/json" }
+          });
+          var payload = await response.json();
+          if (request !== chartRequestId || activeChartKey !== signalKey(signal) || chartInterval !== interval) return;
+          if (!response.ok) throw new Error(payload.error || "Price history is unavailable.");
+          var chart = drawChart(signal, payload.candles, interval);
+          if (!chart) throw new Error("No usable candles were returned for this symbol.");
+          container.innerHTML = chart.svg;
+          $("chart-legend").innerHTML = chart.legend;
+        } catch (error) {
+          if (request !== chartRequestId || activeChartKey !== signalKey(signal)) return;
+          container.innerHTML = '<div class="chart-error">' + esc(error.message || "Price history is temporarily unavailable.") + "</div>";
+        }
+      }
+
+      async function loadRecords() {
+        var id = ++requestId;
+        var params = new URLSearchParams({ limit: "500" });
+        if ($("mode").value) params.set("mode", $("mode").value);
+        if ($("type").value) params.set("type", $("type").value);
+        if ($("confluence-only").checked) params.set("confluenceOnly", "true");
+        $("refresh").disabled = true;
+        $("window-meta").textContent = "Loading journal records…";
+        showSkeleton();
+
+        try {
+          var response = await fetch("/api/public/signals/recent?" + params.toString(), {
+            headers: { Accept: "application/json" }
+          });
+          var payload = await response.json();
+          if (id !== requestId) return;
+          if (!response.ok) throw new Error(payload.error || "Journal request failed");
+          records = Array.isArray(payload.signals) ? payload.signals : [];
           renderRows();
-        });
-        $("signal-rows").addEventListener("keydown", function (event) {
-          if (event.key !== "Enter" && event.key !== " ") return;
-          var row = event.target.closest("tr[data-index]");
-          if (!row) return;
-          event.preventDefault();
-          var signal = currentRows[Number(row.dataset.index)];
-          if (!signal) return;
-          selectedKey = signalKey(signal);
+        } catch (_) {
+          if (id !== requestId) return;
+          records = [];
           renderRows();
+          $("empty").innerHTML = '<div><div class="empty-icon" aria-hidden="true">✕</div><b>Could not load signal journal</b><p>Check the API connection and refresh.</p></div>';
+          $("window-meta").textContent = "Journal request failed";
+        } finally {
+          if (id === requestId) $("refresh").disabled = false;
+        }
+      }
+
+      function csvEscape(value) {
+        var text = String(value == null ? "" : value);
+        return '"' + text.replace(/"/g, '""') + '"';
+      }
+
+      function exportCsv() {
+        if (!currentRows.length) return;
+        var columns = ["timestamp_ist", "symbol", "mode", "signals", "confluence", "price", "entry", "stop", "target", "risk_reward", "sector", "change_pct", "relative_volume"];
+        var lines = [columns.join(",")];
+        currentRows.forEach(function (signal) {
+          var level = signal.levels || {};
+          var context = signal.context || {};
+          var row = [
+            displayTime(signal.ts),
+            signal.symbol,
+            signal.mode,
+            (signal.signals || []).join(" | "),
+            signal.confluence,
+            signal.price,
+            level.entry,
+            level.stop,
+            level.target,
+            level.riskReward,
+            context.sector,
+            context.change,
+            context.relVolume
+          ];
+          lines.push(row.map(csvEscape).join(","));
         });
-        $("detail").addEventListener("click", function (event) {
-          var button = event.target.closest("button[data-interval]");
-          if (!button || button.dataset.interval === chartInterval) return;
-          var signal = currentRows.find(function (row) { return signalKey(row) === selectedKey; });
-          if (!signal) return;
-          chartInterval = button.dataset.interval;
-          renderDetail(signal);
+        var blob = new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+        var url = URL.createObjectURL(blob);
+        var link = document.createElement("a");
+        link.href = url;
+        link.download = "scanner-signals-" + new Date().toISOString().slice(0, 10) + ".csv";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      }
+
+      function scheduleRefresh() {
+        if (eventTimer) window.clearTimeout(eventTimer);
+        eventTimer = window.setTimeout(loadRecords, 900);
+      }
+
+      function connectStream() {
+        var pill = $("feed-pill");
+        if (!window.EventSource) {
+          $("feed-status").textContent = "Live updates unavailable";
+          $("feed-dot").className = "dot warn";
+          if (pill) pill.className = "pill pill-warn";
+          return;
+        }
+        var stream = new EventSource("/api/public/stream");
+        stream.addEventListener("connected", function () {
+          $("feed-status").textContent = "Live updates connected";
+          $("feed-dot").className = "dot good";
+          if (pill) pill.className = "pill pill-good";
         });
+        stream.addEventListener("signal", function (event) {
+          try {
+            if (!JSON.parse(event.data).replay) scheduleRefresh();
+          } catch (_) { /* ignore malformed stream events */ }
+        });
+        stream.onerror = function () {
+          $("feed-status").textContent = "Reconnecting updates…";
+          $("feed-dot").className = "dot warn";
+          if (pill) pill.className = "pill pill-warn";
+        };
+      }
+
+      ["symbol", "from-date", "to-date"].forEach(function (id) {
+        $(id).addEventListener("input", renderRows);
+      });
+      ["mode", "type", "confluence-only"].forEach(function (id) {
+        $(id).addEventListener("change", loadRecords);
+      });
+      $("refresh").addEventListener("click", loadRecords);
+      $("export").addEventListener("click", exportCsv);
+      $("clear-filters").addEventListener("click", function () {
+        $("symbol").value = "";
+        $("mode").value = "";
+        $("type").value = "";
+        $("from-date").value = "";
+        $("to-date").value = "";
+        $("confluence-only").checked = false;
         loadRecords();
-        connectStream();
-      })();
+      });
+
+      $("signal-rows").addEventListener("click", function (event) {
+        var row = event.target.closest("tr[data-index]");
+        if (!row) return;
+        var signal = currentRows[Number(row.dataset.index)];
+        if (!signal) return;
+        selectedKey = signalKey(signal);
+        renderRows();
+      });
+      $("signal-rows").addEventListener("keydown", function (event) {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        var row = event.target.closest("tr[data-index]");
+        if (!row) return;
+        event.preventDefault();
+        var signal = currentRows[Number(row.dataset.index)];
+        if (!signal) return;
+        selectedKey = signalKey(signal);
+        renderRows();
+      });
+
+      $("detail").addEventListener("click", function (event) {
+        var button = event.target.closest("button[data-interval]");
+        if (!button || button.dataset.interval === chartInterval) return;
+        var signal = currentRows.find(function (row) { return signalKey(row) === selectedKey; });
+        if (!signal) return;
+        chartInterval = button.dataset.interval;
+        renderDetail(signal);
+      });
+
+      loadRecords();
+      connectStream();
+    })();
     </script>
   </body>
 </html>
