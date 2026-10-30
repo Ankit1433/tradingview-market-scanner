@@ -135,10 +135,14 @@ async function prepareUniverse(provider,{now=provider.clock(),transport=axios,en
  await provider.persist('universe-v2',{manifest});return manifest;
 }
 async function assertPrepared(provider,manifest){
+ validateManifest(manifest,provider.clock());
  if(manifest.version!==2)return; // Retain externally attested legacy manifests.
+ if(await require('../services/paperScanningPolicy').allows(manifest)){provider.health.screeningVerification='unverified-paper';return;}
+ provider.health.screeningVerification='comparison-required';
  const saved=await provider.read('launch-comparison');
  const report=saved?.comparison,window=report?.captureWindow,start=Date.parse(window?.startedAt),end=Date.parse(window?.finishedAt);
  if(report?.reviewVersion!==2||report?.formulaVersion!==require('./screening').FORMULA_VERSION||saved.universeKey!==manifest.universeKey||report.status!=='review-required'||!Number.isFinite(start)||!Number.isFinite(end)||end<start||end-start>60000||end>provider.clock().getTime()+60000||report.asOf!==window.finishedAt||['intraday','early','swing'].some(mode=>!Array.isArray(report.modes?.[mode]?.comparisons)||!Array.isArray(report.modes?.[mode]?.onlyBaseline)||!Array.isArray(report.modes?.[mode]?.onlyCandidate)))fail('UPSTOX_COMPARISON_REQUIRED');
+ provider.health.screeningVerification='comparison-recorded';
 }
 async function importReport(provider,buffer,date,{now=provider.clock(),attested=false}={}){
  if(!attested)fail('UPSTOX_METADATA_SOURCE_ATTESTATION_REQUIRED');

@@ -183,7 +183,7 @@ function record(entry, { persist = true } = {}) {
     price: entry.price ?? null,
     confluence: Boolean(entry.confluence),
     levels: entry.levels || null,
-    context: { ...(entry.context || {}), marketDataProvider: require('../marketData').name },
+    context: { ...(entry.context || {}), marketDataProvider: require('../marketData').name, ...(require('../marketData').name==='upstox'?{screeningVerification:require('../marketData').provider().health.screeningVerification||'comparison-required'}:{}) },
   });
 
   recent.push(record_);

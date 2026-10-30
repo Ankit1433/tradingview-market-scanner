@@ -176,6 +176,13 @@
       <div class="card-head"><div><span class="setup-eyebrow">MARKET DATA WORKSPACE</span><h2 id="upstox-heading" class="card-title">Upstox data setup</h2></div><span class="card-tag">ADMIN ONLY</span></div>
       <p class="card-desc">Prepare your NSE universe, review exclusions and compare screeners before changing Render settings.</p>
       <div class="setup-note">Read-only preparation · Paper research · No orders placed. This panel does not enable scanning or approve data use.</div>
+      <form id="paper-mode-form" class="setup-status standard-form">
+        <h3 class="card-title">Live paper scanning</h3>
+        <label class="setup-attestation"><input id="paper-mode-enabled" name="enabled" type="checkbox"> Skip screener comparison for this universe. I understand signals are unverified and informational only.</label>
+        <p class="card-desc">Freshness checks, corporate-action exclusions and worker ownership remain active. Saving this choice does not start workers or change Render settings. Turn it off to require comparison again; rerun comparison in ingest mode.</p>
+        <button class="btn btn-secondary" type="submit">Save paper scanning option</button>
+        <p id="paper-mode-status" role="status" aria-live="polite"></p>
+      </form>
       <div class="setup-metrics" aria-label="Universe preparation progress">
         <div><span>Examined</span><strong id="setup-examined">—</strong></div><div><span>Included</span><strong id="setup-included">—</strong></div><div><span>Excluded</span><strong id="setup-excluded">—</strong></div><div><span>Total universe</span><strong id="setup-total">—</strong></div>
       </div>

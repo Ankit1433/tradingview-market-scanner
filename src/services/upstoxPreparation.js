@@ -44,4 +44,5 @@ async function importReport(buffer,date,attested){
  if(process.env.INGEST_MODE!=='true'||!db.status().connected)throw Error('Report import requires the database-backed ingest API');
  try{const provider=require('../marketData/upstox').getProvider();const result=await require('../marketData/universe').importReport(provider,buffer,date,{attested});await db.flush();await db.saveState('upstox:nse-mcap:'+date,await provider.read('nse-mcap:'+date));return result;}catch(error){throw Error(errorCode(error));}
 }
-module.exports={start,status,stop,errorCode,importReport};
+function cancel(){controller?.abort();}
+module.exports={start,status,stop,cancel,errorCode,importReport};

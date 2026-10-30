@@ -504,7 +504,7 @@ See [PERSONAL_JOURNAL.md](PERSONAL_JOURNAL.md) for the new required migration, a
 
 ## Phase 5 UI
 
-The premium refresh keeps vanilla JavaScript and adds a shared dark layout, responsive navigation, updated forms and tables, and motion controls that respect device preferences. The personal page retains the admin NSE report import, Upstox preparation status and exclusions report. Private pages and API responses remain excluded from service-worker caching; the refreshed shell uses cache version 8. Google Fonts are optional; system font fallbacks work when external fonts are unavailable.
+The premium refresh keeps vanilla JavaScript and adds a shared dark layout, responsive navigation, updated forms and tables, and motion controls that respect device preferences. The personal page retains the admin NSE report import, Upstox preparation status and exclusions report. Private pages and API responses remain excluded from service-worker caching; the refreshed shell uses cache version 9. Google Fonts are optional; system font fallbacks work when external fonts are unavailable.
 
 Symbol charts with recorded-signal markers, saved account alert preferences, and detailed evidence statistics are implemented in vanilla JavaScript. See [PHASE5.md](PHASE5.md) for routes, the additive preference migration, browser tests and limitations. Alert delivery filtering is implemented by Phase 3 and requires its database migration and worker setup.
 
@@ -577,3 +577,5 @@ The owner-requested Upstox stock exclusions are listed in `src/config/upstoxUniv
 Screener/corporate-action review now covers all 14 numeric comparison fields plus required sector classification, and reports the scope and counts of corporate-action exclusions. See [UPSTOX_DATA_SETUP.md](UPSTOX_DATA_SETUP.md#screener-and-corporate-action-review-2). Fixture checks do not establish production parity or approve cutover.
 
 Worker verification: `npm run test:workers` covers real scheduler execution with fixture data. Admins can inspect process-local activity at `/api/account/admin/workers` after deployment. See [WORKER_VERIFICATION.md](WORKER_VERIFICATION.md) for the distinction between ticks, scan activity and live production verification.
+
+Admins can opt into explicitly labelled unverified paper scanning via the saved checkbox in Upstox setup, and revoke it later. Only screener comparison is optional; sourced-universe validation, fresh candles, corporate-action quarantine and worker ownership remain enforced. See [the setup instructions](UPSTOX_DATA_SETUP.md#optional-unverified-paper-scanning). No new migration is required.

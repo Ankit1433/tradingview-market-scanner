@@ -38,3 +38,8 @@
     }).observe(node, { childList: true, characterData: true, subtree: true });
   });
 })();
+
+(function(){
+ if(typeof fetch!=='function'||!document.querySelector('#main-content'))return;
+ fetch('/api/public/market/status').then(function(response){if(!response.ok)return null;return response.json();}).then(function(data){if(data&&data.marketData&&data.marketData.screeningVerification==='unverified-paper'){var note=document.createElement('p');note.className='paper-banner';note.setAttribute('role','note');note.textContent='UNVERIFIED PAPER SCANNING · Screener comparison skipped. Informational signals only; no orders placed.';document.querySelector('#main-content').prepend(note);}}).catch(function(){});
+})();

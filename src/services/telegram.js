@@ -133,6 +133,7 @@ async function drain() {
  * 429s.
  */
 async function safeSend(msg, options = {}) {
+  if(require('../marketData').name==='upstox'&&require('../marketData').provider().health.screeningVerification==='unverified-paper')msg='UNVERIFIED PAPER · Screener comparison skipped\n'+msg;
   enqueue(msg, options);
 }
 

@@ -18,6 +18,12 @@
  if($('upstox-panel')){
   $('upstox-panel').hidden=me.role!=='admin';
   if(me.role==='admin'){
+   if($('paper-mode-form')){
+    const renderPolicy=value=>{$('paper-mode-enabled').checked=value.enabled===true;$('paper-mode-status').textContent=value.enabled?'UNVERIFIED PAPER MODE enabled for the saved universe. Restart in scanner mode to run workers.':'Comparison required. Enable ingest mode before starting preparation.';};
+    try{renderPolicy(await api('/admin/upstox/paper-mode'));}catch(error){$('paper-mode-status').textContent=error.message;}
+    $('paper-mode-form').addEventListener('submit',protect(async()=>{renderPolicy(await api('/admin/upstox/paper-mode',{enabled:$('paper-mode-enabled').checked}));}));
+   }
+
    const renderSetup=data=>{for(const [id,key]of [['setup-examined','examined'],['setup-included','included'],['setup-excluded','excluded'],['setup-total','total']]){const node=$(id);if(node){const coverage=data.metadata?.coverage||data.coverage;const value=data.progress?.[key]??(key==='total'?coverage?.expected:key==='excluded'?coverage?.excluded?.length:coverage?.[key]);node.textContent=String(value??'—');}}$('upstox-status').textContent=`${data.state} · ${data.phase||'not started'}${data.code?' · '+data.code:''}${data.progress?.examined!==undefined?' · Examined '+data.progress.examined+'/'+data.progress.total+' · Included '+data.progress.included+' · Excluded '+data.progress.excluded+(data.progress.currentSymbol?' · Checking '+data.progress.currentSymbol:'')+' · Updated '+data.progress.updatedAt:''}${data.wait?' · Waiting: '+data.wait.reason+' until '+data.wait.until:''}. Scanning stays controlled by Render settings.`;$('upstox-report').textContent=JSON.stringify(data,null,2);};
    $('upstox-report-form').addEventListener('submit',protect(async event=>{
     const form=event.currentTarget,file=form.elements.reportFile.files[0],message=$('upstox-import-status');message.textContent='Importing NSE report…';

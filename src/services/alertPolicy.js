@@ -14,5 +14,5 @@ function matches(user,signal,now=new Date()){
  return true;
 }
 function dedupe(signal){return crypto.createHash('sha256').update(JSON.stringify([nowIST(new Date(signal.ts)).dateKey,signal.mode,signal.symbol,[...new Set(signal.signals)].sort()])).digest('hex');}
-function format(signal){const levels=signal.levels||{};const lines=[`PAPER SIGNAL · ${signal.symbol}`,`${signal.mode} · ${signal.signals.join(' + ')}`,`Observed ₹${Number(signal.price).toFixed(2)}`];for(const k of ['entry','stop','target'])if(Number.isFinite(levels[k]))lines.push(`${k}: ₹${levels[k].toFixed(2)}`);lines.push('Informational only. No order placed.');return lines.join('\n');}
+function format(signal){const levels=signal.levels||{};const lines=[`PAPER SIGNAL · ${signal.symbol}`,`${signal.mode} · ${signal.signals.join(' + ')}`,`Observed ₹${Number(signal.price).toFixed(2)}`];if(signal.context?.screeningVerification==='unverified-paper')lines.push('UNVERIFIED PAPER · Screener comparison skipped');for(const k of ['entry','stop','target'])if(Number.isFinite(levels[k]))lines.push(`${k}: ₹${levels[k].toFixed(2)}`);lines.push('Informational only. No order placed.');return lines.join('\n');}
 module.exports={quiet,matches,dedupe,format};
