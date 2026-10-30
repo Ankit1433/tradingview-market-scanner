@@ -291,16 +291,20 @@ const DOCS_HTML = `<!DOCTYPE html>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>AnkQuant API — Docs</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui.min.css" />
-  <style>
-    body { margin: 0; background: #fafafa; }
-    .topbar { display: none; }
-  </style>
+  <link rel="stylesheet" href="/assets/workspace.css" />
+  <link rel="stylesheet" href="/assets/docs.css" />
 </head>
 <body>
-  <div id="swagger-ui"></div>
+  <a class="skip-link" href="#main-content">Skip to API reference</a>
+  <header class="docs-header"><a class="brand" href="/app"><span class="brand-name">Ank<span>Quant</span></span><span class="badge badge-accent">API REFERENCE</span></a><nav aria-label="Documentation navigation"><a href="/personal">Personal workspace</a><a href="/app">Scanner</a><a href="/api/docs.json">OpenAPI JSON</a></nav></header>
+  <main id="main-content" tabindex="-1" class="docs-shell"><section class="docs-hero" aria-labelledby="docs-title"><span class="docs-eyebrow">DEVELOPER WORKSPACE</span><h1 id="docs-title">Explore the AnkQuant API</h1><p>Signals, research evidence and your private paper journal. Inspect endpoint contracts and authentication requirements below.</p><div class="docs-notice">PAPER RESEARCH ONLY · No broker integration or order placement. “Try it out” sends real API requests; writes can change your saved settings or paper records.</div></section>
+  <div class="docs-links"><a href="/api/docs.json">Download API schema ↗</a><span>Session and machine-key requirements vary by endpoint.</span></div>
+  <p id="docs-load-status" role="status">Loading interactive API reference. If it is unavailable, open the OpenAPI JSON link above.</p><div id="swagger-ui"></div></main>
+  <footer class="docs-footer">AnkQuant · Private paper research workspace</footer>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui-bundle.min.js"></script>
   <script>
     window.onload = () => {
+      if(typeof SwaggerUIBundle==='undefined')return;
       SwaggerUIBundle({
         url: '/api/docs.json',
         dom_id: '#swagger-ui',
@@ -308,6 +312,7 @@ const DOCS_HTML = `<!DOCTYPE html>
         presets: [SwaggerUIBundle.presets.apis],
         layout: 'BaseLayout',
         tryItOutEnabled: true,
+        onComplete: () => { document.getElementById('docs-load-status').hidden = true; },
       });
     };
   </script>

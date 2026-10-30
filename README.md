@@ -504,7 +504,7 @@ See [PERSONAL_JOURNAL.md](PERSONAL_JOURNAL.md) for the new required migration, a
 
 ## Phase 5 UI
 
-The premium refresh keeps vanilla JavaScript and adds a shared dark layout, responsive navigation, updated forms and tables, and motion controls that respect device preferences. The personal page retains the admin NSE report import, Upstox preparation status and exclusions report. Private pages and API responses remain excluded from service-worker caching; the refreshed shell uses cache version 7. Google Fonts are optional; system font fallbacks work when external fonts are unavailable.
+The premium refresh keeps vanilla JavaScript and adds a shared dark layout, responsive navigation, updated forms and tables, and motion controls that respect device preferences. The personal page retains the admin NSE report import, Upstox preparation status and exclusions report. Private pages and API responses remain excluded from service-worker caching; the refreshed shell uses cache version 8. Google Fonts are optional; system font fallbacks work when external fonts are unavailable.
 
 Symbol charts with recorded-signal markers, saved account alert preferences, and detailed evidence statistics are implemented in vanilla JavaScript. See [PHASE5.md](PHASE5.md) for routes, the additive preference migration, browser tests and limitations. Alert delivery filtering is implemented by Phase 3 and requires its database migration and worker setup.
 
@@ -567,3 +567,5 @@ for the Render workflow, cutover settings, source details and live checks still
 required. No new SQL migration or Upstox OAuth/order permission is introduced.
 
 Upstox preparation progress reports `examined` (also exposed as `processed`), `included`, `excluded`, `total`, `currentSymbol` and `updatedAt`. Counts advance for excluded symbols too. The admin status also exposes request-budget/retry wait reasons and their expected end time. The existing 1,800-request/30-minute budget can pause a full-universe preparation; this limit is preserved. Requests use a 12-second transport timeout and at most three attempts. A Retry-After over 30 seconds fails with `UPSTOX_RETRY_WAIT_EXCEEDED` rather than retrying early; retry preparation later to reuse valid cached profiles. No database migration is required.
+
+The Upstox admin panel uses responsive progress cards, a source-report import form and a collapsible audit report. Only admin accounts can see its controls or use its APIs; friends cannot prepare or import data. The branded `/api/docs` reference retains existing access rules (signed-in users or a valid machine key in private mode) and Swagger interaction. Swagger assets load from cdnjs; the OpenAPI JSON link remains available if the CDN cannot load.

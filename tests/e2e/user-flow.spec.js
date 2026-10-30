@@ -22,14 +22,14 @@ test('preferences remain owner-isolated; errors preserve editable form',async({p
 
 test('admin can prepare Upstox data, inspect exclusions and import an NSE report',async({page})=>{
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
- let starts=0,imports=0;const ready={state:'review-required',phase:'complete',comparison:{approved:false,excluded:[{symbol:'SPLITTEST',audit:{affected:[{type:'split',date:'2026-10-29'}]}}]}};
+ let starts=0,imports=0;const ready={state:'review-required',phase:'complete',metadata:{coverage:{expected:2,included:1,excluded:[{symbol:'SPLITTEST'}]}},comparison:{approved:false,excluded:[{symbol:'SPLITTEST',audit:{affected:[{type:'split',date:'2026-10-29'}]}}]}};
  await page.route('**/api/account/admin/upstox',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(ready)}));
  await page.route('**/api/account/admin/upstox/prepare',route=>{starts++;return route.fulfill({status:202,contentType:'application/json',body:'{"started":true}'});});
  await page.route('**/api/account/admin/upstox/report',route=>{imports++;expect(route.request().headers()['content-type']).toBe('application/zip');expect(route.request().headers()['x-report-date']).toBe('2026-10-29');return route.fulfill({status:200,contentType:'application/json',body:'{"rows":1}'});});
  await login(page,'admin@example.test');await expect(page.locator('#upstox-panel')).toBeVisible();
- await page.getByRole('button',{name:'Prepare universe and compare'}).click();await expect(page.locator('#upstox-status')).toContainText('review-required');await expect(page.locator('#upstox-report')).toContainText('SPLITTEST');expect(starts).toBe(1);
+ await page.getByRole('button',{name:'Prepare universe and compare'}).click();await expect(page.locator('#upstox-status')).toContainText('review-required');await expect(page.locator('#upstox-report')).toContainText('SPLITTEST');expect(starts).toBe(1);await expect(page.locator('#setup-included')).toHaveText('1');await expect(page.locator('#setup-excluded')).toHaveText('1');
  await page.route('**/api/account/admin/upstox',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({state:'running',phase:'metadata',progress:{examined:1800,total:2357,included:1750,excluded:50,currentSymbol:'TEST',updatedAt:'2026-10-30T09:30:00.000Z'},wait:{reason:'request-budget',until:'2026-10-30T09:41:00.000Z'}})}));
- await page.getByRole('button',{name:'Refresh status',exact:true}).click();await expect(page.locator('#upstox-status')).toContainText('Examined 1800/2357');await expect(page.locator('#upstox-status')).toContainText('Excluded 50');await expect(page.locator('#upstox-status')).toContainText('request-budget');
+ await page.getByRole('button',{name:'Refresh status',exact:true}).click();await expect(page.locator('#upstox-status')).toContainText('Examined 1800/2357');await expect(page.locator('#upstox-status')).toContainText('Excluded 50');await expect(page.locator('#setup-examined')).toHaveText('1800');await expect(page.locator('#setup-excluded')).toHaveText('50');await expect(page.locator('#upstox-status')).toContainText('request-budget');
  await page.getByText('If NSE blocks the server download',{exact:true}).click();const form=page.locator('#upstox-report-form');await form.locator('[name=reportDate]').fill('2026-10-29');await form.locator('[name=reportFile]').setInputFiles({name:'PR291026.zip',mimeType:'application/zip',buffer:Buffer.from('fixture; parser tested separately')});await form.locator('[name=attested]').check();await page.getByRole('button',{name:'Import NSE report',exact:true}).click();await expect(page.locator('#account-status')).toContainText('NSE report imported');expect(imports).toBe(1);await expect(page.locator('#upstox-import-status')).toContainText('NSE report imported');await page.route('**/api/account/admin/upstox/report',route=>route.fulfill({status:409,contentType:'application/json',body:JSON.stringify({error:'UPSTOX_METADATA_VALUE_OR_UNIT_INVALID'})}));await page.getByRole('button',{name:'Import NSE report',exact:true}).click();await expect(page.locator('#upstox-import-status')).toContainText('UPSTOX_METADATA_VALUE_OR_UNIT_INVALID');expect(errors).toEqual([]);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
 
@@ -50,4 +50,15 @@ test('redesigned workspace navigation and motion preference work on every page',
  await expect(page.locator('.motion-toggle')).toBeDisabled();
  await expect(page.locator('body')).toHaveClass(/motion-paused/);
  await expect(page.locator('#upstox-panel')).toBeHidden();
+});
+
+
+test('API reference has a responsive branded shell and CDN fallback',async({page})=>{
+ await login(page);
+ await page.goto(base+'/api/docs');
+ await expect(page.getByRole('heading',{name:'Explore the AnkQuant API'})).toBeVisible();
+ await expect(page.locator('#docs-load-status')).toContainText('OpenAPI JSON');
+ await expect(page.getByRole('link',{name:'OpenAPI JSON',exact:true})).toHaveAttribute('href','/api/docs.json');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ const schema=await page.request.get(base+'/api/docs.json');expect(schema.ok()).toBe(true);expect((await schema.json()).openapi).toBe('3.0.3');
 });
