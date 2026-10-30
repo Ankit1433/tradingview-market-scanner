@@ -47,14 +47,14 @@ async function start(){if(running)return;if(!db.status().connected)throw new Err
  botLease=await require('../marketData/ownership').acquire({key:'ankquant-telegram-worker',onLost:()=>{running=false;clearTimeout(timer);console.error('[alerts] Telegram ownership lost; worker stopped');}});
  try{offset=(await db.loadState('telegram-update-offset'))?.payload?.offset||0;}catch(error){await botLease.stop();throw error;}
  running=true;sharedDelivery=createDelivery({accounts:store,send:telegram,canSend:()=>running});alerts=require('./alertLoop').createAlerts({accounts:store,db,deliver:sharedDelivery});
- let lastEvaluation=0;
- async function tick(){active=(async()=>{
+ let lastEvaluation=0,lastFailure=null,lastWarningAt=0;
+ async function tick(){let stage='telegram_poll';active=(async()=>{
   await poll();
-  if(process.env.SIGNAL_ALERTS_ENABLED!=='false'){await alerts.discover();await alerts.monitor();}
-  if(Date.now()-lastEvaluation>60000){await evaluateOpen();lastEvaluation=Date.now();}
-  await deliver();
-  await alerts.drain();
- })();try{await active;}catch(_){console.warn('[alerts] database/feed unavailable; retrying');}finally{active=null;if(running){timer=setTimeout(tick,5000);timer.unref?.();}}}tick();}
+  if(process.env.SIGNAL_ALERTS_ENABLED!=='false'){stage='signal_discovery';await alerts.discover();stage='scanner_monitor';await alerts.monitor();}
+  if(Date.now()-lastEvaluation>60000){stage='paper_evaluation';await evaluateOpen();lastEvaluation=Date.now();}
+  stage='paper_delivery';await deliver();
+  stage='alert_delivery';await alerts.drain();
+ })();try{await active;lastFailure=null;}catch(error){const failure=require('../operations/failureDetails').details(error,stage),key=JSON.stringify(failure);if(key!==lastFailure||Date.now()-lastWarningAt>=60000){console.warn('[alerts] '+key);lastFailure=key;lastWarningAt=Date.now();}}finally{active=null;if(running){timer=setTimeout(tick,5000);timer.unref?.();}}}tick();}
 async function stop(){running=false;clearTimeout(timer);if(active)await active.catch(()=>{});await botLease?.stop();}
 
 module.exports={start,stop,linkMessage,evaluateOpen,deliver};

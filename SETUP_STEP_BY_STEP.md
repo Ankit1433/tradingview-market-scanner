@@ -375,3 +375,9 @@ after the check to avoid repeating requests on each restart. Run during an NSE
 session after completed five-minute candles exist: stale market data may fail
 the current strict freshness checks outside that window. This does not verify
 screening parity, metadata, streaming, calendar accuracy or data-use permissions.
+
+Diagnostic failures now report a fixed stage (for example `quote_RELIANCE`), an
+allowlisted code and, for alert worker errors, HTTP status / known database
+resource. Calendar warnings no longer hide the Upstox subprocess failure code.
+Identical alert-worker failures are logged at most once per minute until recovery.
+No raw exceptions, Telegram URLs, provider response bodies or secrets are logged.

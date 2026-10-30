@@ -9,8 +9,11 @@ function runCheck({env=process.env,execute=execFile,log=console.log}={}) {
   return new Promise(resolve=>{
     execute(process.execPath,[path.join(__dirname,'../../scripts/check-upstox.js')],{env,timeout:180000,maxBuffer:65536},(error,stdout,stderr)=>{
       if(error){
-        const code=String(stderr||'').trim();
-        log('[upstox-check] '+(/^UPSTOX_[A-Z_]+$/.test(code)?code:'UPSTOX_CONNECTIVITY_CHECK_FAILED'));
+        const line=String(stderr||'').trim().split(/\r?\n/).at(-1);
+        let failure;
+        try{const parsed=JSON.parse(line);failure=require('../operations/failureDetails').details({message:parsed.code},parsed.stage);}catch(_){failure=require('../operations/failureDetails').details({message:line},'configuration');}
+        if(failure.code==='OPERATION_FAILED')failure.code='UPSTOX_CONNECTIVITY_CHECK_FAILED';
+        log('[upstox-check] '+JSON.stringify({authenticated:false,...failure}));
         resolve('failed');return;
       }
       try{
