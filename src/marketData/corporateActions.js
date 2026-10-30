@@ -30,6 +30,7 @@ async function auditHistory(provider,instrument,bars){
   // Validate the entire payload before caching, including dates outside lookback.
   classify(events,'1900-01-01','9999-12-31');cached={fetchedAt:now.getTime(),events};await provider.persist(key,cached);
  }
+ if(!Array.isArray(bars)||!bars.length||!Number.isFinite(bars[0]?.time))throw Error('UPSTOX_CORPORATE_ACTION_DATA_INVALID');
  const historyFrom=nowIST(new Date(bars[0].time*1000)).dateKey,minimumFrom=strategyStart(provider,now);
  const from=historyFrom<minimumFrom?historyFrom:minimumFrom,to=nowIST(now).dateKey,result={...classify(cached.events,from,to),historyFrom,minimumLookbackSessions:250};
  if(result.status==='excluded'){

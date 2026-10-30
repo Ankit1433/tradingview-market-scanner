@@ -1,3 +1,5 @@
+const workerStatus=require('../operations/workerStatus');
+let workerClock=()=>new Date();
 /**
  * The scanner's main cycle. Python used `while True: ... t.sleep(s_time)`;
  * here each call to runCycle() returns how many ms to wait, and tick()
@@ -119,9 +121,11 @@ async function runCycle(now = new Date()) {
   try {
     current = await getStocks();
   } catch (e) {
+    workerStatus.failure('intraday',now);
     console.error(`Fetch Error: ${e.message}`);
     return 10000;
   }
+  workerStatus.activity('intraday','discoveryFetch',Object.keys(current).length,now);
   state.current = current;
   state.lastScanAt = new Date().toISOString();
   pushClient.pushUniverse(
@@ -482,19 +486,20 @@ async function runCycle(now = new Date()) {
 async function tick() {
   let waitMs = 20000;
   try {
-    waitMs = await runCycle();
+    waitMs = await workerStatus.run('intraday',()=>runCycle(workerClock()),workerClock);
   } catch (e) {
     console.error('[scanLoop] cycle error:', e);
     waitMs = 10000;
   }
   if (running) {
+    workerStatus.scheduled('intraday',waitMs,workerClock());
     timer = setTimeout(tick, waitMs);
   }
 }
 
-async function start() {
+async function start({clock=()=>new Date()}={}) {
   if (running) return;
-  running = true;
+  running = true;workerClock=clock;workerStatus.start('intraday');
 
   console.log('Loading initial stocks...');
   try {
@@ -507,11 +512,11 @@ async function start() {
   console.log('Scanner Started...');
 
   await safeSend('🟢 SCANNER STARTED\n✅ Running...');
-  tick();
+  if(running)tick();
 }
 
 function stop() {
-  running = false;
+  running = false;workerStatus.stop('intraday');
   if (timer) clearTimeout(timer);
   timer = null;
   console.log('Scanner stopped.');

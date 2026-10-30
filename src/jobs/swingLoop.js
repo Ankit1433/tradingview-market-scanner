@@ -1,3 +1,5 @@
+const workerStatus=require('../operations/workerStatus');
+let workerClock=()=>new Date();
 /**
  * The swing scan cycle.
  *
@@ -84,6 +86,7 @@ async function scanForEntries(dateKey, now) {
   try {
     universe = await getSwingCandidates();
   } catch (e) {
+    workerStatus.failure('swing',now);
     console.error(`[swing] candidate fetch failed: ${e.message}`);
     await safeSend(
       `⚠️ SWING SCAN FAILED\nCouldn't fetch candidate universe: ${e.message}`,
@@ -248,6 +251,7 @@ async function runSwingScan({ force = false, now = new Date() } = {}) {
     await manageOpenPositions(now);
     const { scanned, alerted } = await scanForEntries(dateKey, now);
 
+    workerStatus.activity('swing','scanPass',scanned,now);
     state.lastScanDate = dateKey;
     swingState.save();
 
@@ -293,25 +297,28 @@ async function runSwingScan({ force = false, now = new Date() } = {}) {
 
 async function tick() {
   try {
-    const now = new Date();
+    await workerStatus.run('swing',async()=>{
+    const now = workerClock();
     const state = swingState.getState();
     const TEST_MODE = process.env.TEST_MODE === "true";
 
     if (!TEST_MODE && isScanDue(now, S.SWING_SCAN_TIME, state.lastScanDate)) {
       await runSwingScan({ now });
     }
+    },workerClock);
   } catch (e) {
     console.error("[swing] tick error:", e);
   }
 
   if (running) {
+    workerStatus.scheduled('swing',S.SWING_SCAN_CHECK_INTERVAL_MS,workerClock());
     timer = setTimeout(tick, S.SWING_SCAN_CHECK_INTERVAL_MS);
   }
 }
 
-function start() {
+function start({clock=()=>new Date()}={}) {
   if (running) return;
-  running = true;
+  running = true;workerClock=clock;workerStatus.start('swing');
   swingState.load();
 
   const open = swingState.openPositionsList();
@@ -328,7 +335,7 @@ function start() {
 }
 
 function stop() {
-  running = false;
+  running = false;workerStatus.stop('swing');
   if (timer) clearTimeout(timer);
   timer = null;
   console.log("[swing] loop stopped.");

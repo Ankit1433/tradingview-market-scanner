@@ -10,6 +10,7 @@ preparation.importReport=async(buffer,date,attested)=>{assert(Buffer.isBuffer(bu
  app=await fixture();app.users.get('alice').role='admin';
  async function login(email){const response=await fetch(app.base+'/api/account/login',{method:'POST',headers:{origin:app.base,'content-type':'application/json'},body:JSON.stringify({email,password:'Fixture-password-123'})});assert.equal(response.status,200);return response.headers.get('set-cookie').split(';')[0];}
  const admin=await login('alice@example.test'),friend=await login('bob@example.test');
+ const workers=app.base+'/api/account/admin/workers';assert.equal((await fetch(workers)).status,401);assert.equal((await fetch(workers,{headers:{cookie:friend}})).status,403);const workerResponse=await fetch(workers,{headers:{cookie:admin}});assert.equal(workerResponse.status,200);assert.deepEqual(Object.keys((await workerResponse.json()).workers),['intraday','swing','outcomes']);
  const url=app.base+'/api/account/admin/upstox';
  assert.equal((await fetch(url)).status,401);assert.equal((await fetch(url,{headers:{cookie:friend}})).status,403);assert.equal((await fetch(url,{headers:{cookie:admin}})).status,200);
  assert.equal((await fetch(url+'/prepare',{method:'POST',headers:{cookie:admin,origin:'https://other.example','content-type':'application/json'},body:'{}'})).status,403);

@@ -7,6 +7,7 @@ const {unzipSync}=require('fflate');
 const {expectedLast}=require('./freshness');
 const {sessionForDate}=require('../services/tradingCalendar');
 const {nowIST}=require('../config/timeUtils');
+const approvedExclusions=require('../config/upstoxUniverse');
 const DAY=86400000;
 function fail(code){throw new Error(code);}
 function filePath(env=process.env){return env.UPSTOX_UNIVERSE_FILE||path.join(env.SWING_DATA_DIR||path.join(__dirname,'../../data'),'upstox','universe.json');}
@@ -55,8 +56,16 @@ function validateManifest(value,now=new Date(),{allowExpired=false}={}){
  if(!value||typeof value.source!=='string'||!value.source.trim()||!Array.isArray(value.stocks)||value.stocks.length<1||value.stocks.length>5000||!['verified','provider-native-audited'].includes(value.adjustmentPolicy))fail('UPSTOX_UNIVERSE_METADATA_STALE_OR_UNVERIFIED');
  const age=now.getTime()-Date.parse(value.asOf);if(!Number.isFinite(age)||age<0||(!allowExpired&&age>7*DAY))fail('UPSTOX_UNIVERSE_METADATA_STALE_OR_UNVERIFIED');
  const symbols=new Set();for(const row of value.stocks){if(!/^[A-Z0-9.&_-]{1,24}$/.test(row.symbol)||symbols.has(row.symbol)||!Number.isFinite(row.marketCap)||row.marketCap<=0||typeof row.sector!=='string'||!row.sector.trim()||row.sector.length>120||row.eligible!==true)fail('UPSTOX_UNIVERSE_METADATA_INVALID');symbols.add(row.symbol);}
- if(value.version===2&&(!value.report||!/^\d{4}-\d{2}-\d{2}$/.test(value.report.sourceDate)||! /^[a-f0-9]{64}$/.test(value.report.sha256)||value.coverage?.expected!==value.stocks.length||!Array.isArray(value.coverage?.excluded)||value.coverage.excluded.length))fail('UPSTOX_UNIVERSE_COVERAGE_INCOMPLETE');
- if(value.version===2&&(value.coverage?.complete!==true||typeof value.universeKey!=='string'||! /^[a-f0-9]{64}$/.test(value.universeKey)||value.scope!=='NSE_EQ_EQ_COMPANY'||value.corporateActionPolicy!=='block-structural-actions'))fail('UPSTOX_UNIVERSE_COVERAGE_INCOMPLETE');
+ if(value.version===2){
+  const coverage=value.coverage,excluded=coverage?.excluded;
+  if(!value.report||!/^\d{4}-\d{2}-\d{2}$/.test(value.report.sourceDate)||! /^[a-f0-9]{64}$/.test(value.report.sha256)||!Array.isArray(excluded))fail('UPSTOX_UNIVERSE_COVERAGE_INCOMPLETE');
+  const excludedSymbols=new Set();
+  for(const row of excluded){
+   if(!row||!Object.hasOwn(approvedExclusions,row.symbol)||row.reason!=='OWNER_EXCLUDED_STOCK'||excludedSymbols.has(row.symbol)||symbols.has(row.symbol))fail('UPSTOX_UNIVERSE_COVERAGE_INCOMPLETE');
+   excludedSymbols.add(row.symbol);
+  }
+  if([...symbols].some(symbol=>Object.hasOwn(approvedExclusions,symbol))||coverage.expected!==value.stocks.length+excluded.length||coverage.included!==value.stocks.length||coverage.complete!==(excluded.length===0)||typeof value.universeKey!=='string'||! /^[a-f0-9]{64}$/.test(value.universeKey)||value.scope!=='NSE_EQ_EQ_COMPANY'||value.corporateActionPolicy!=='block-structural-actions')fail('UPSTOX_UNIVERSE_COVERAGE_INCOMPLETE');
+ }
  return value;
 }
 async function loadManifest(provider,{env=process.env,refresh=false,prepare=prepareUniverse}={}){
@@ -101,6 +110,7 @@ async function prepareUniverse(provider,{now=provider.clock(),transport=axios,en
   if(signal?.aborted)fail('UPSTOX_PREPARATION_CANCELLED');
   progress(symbol);
   try {
+  if(Object.hasOwn(approvedExclusions,symbol)){excluded.push({symbol,reason:'OWNER_EXCLUDED_STOCK',detail:approvedExclusions[symbol]});continue;}
   const row=records.get(symbol);
   if(!row){excluded.push({symbol,reason:'NSE_EQ_METADATA_MISSING'});continue;}
   if(row.unavailable){excluded.push({symbol,reason:row.unavailable});continue;}
@@ -128,7 +138,7 @@ async function assertPrepared(provider,manifest){
  if(manifest.version!==2)return; // Retain externally attested legacy manifests.
  const saved=await provider.read('launch-comparison');
  const report=saved?.comparison,window=report?.captureWindow,start=Date.parse(window?.startedAt),end=Date.parse(window?.finishedAt);
- if(report?.formulaVersion!==require('./screening').FORMULA_VERSION||saved.universeKey!==manifest.universeKey||report.status!=='review-required'||!Number.isFinite(start)||!Number.isFinite(end)||end<start||end-start>60000||end>provider.clock().getTime()+60000||report.asOf!==window.finishedAt||['intraday','early','swing'].some(mode=>!Array.isArray(report.modes?.[mode]?.comparisons)||!Array.isArray(report.modes?.[mode]?.onlyBaseline)||!Array.isArray(report.modes?.[mode]?.onlyCandidate)))fail('UPSTOX_COMPARISON_REQUIRED');
+ if(report?.reviewVersion!==2||report?.formulaVersion!==require('./screening').FORMULA_VERSION||saved.universeKey!==manifest.universeKey||report.status!=='review-required'||!Number.isFinite(start)||!Number.isFinite(end)||end<start||end-start>60000||end>provider.clock().getTime()+60000||report.asOf!==window.finishedAt||['intraday','early','swing'].some(mode=>!Array.isArray(report.modes?.[mode]?.comparisons)||!Array.isArray(report.modes?.[mode]?.onlyBaseline)||!Array.isArray(report.modes?.[mode]?.onlyCandidate)))fail('UPSTOX_COMPARISON_REQUIRED');
 }
 async function importReport(provider,buffer,date,{now=provider.clock(),attested=false}={}){
  if(!attested)fail('UPSTOX_METADATA_SOURCE_ATTESTATION_REQUIRED');
