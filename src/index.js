@@ -70,6 +70,10 @@ async function initializeStorageAndLoops() {
   }
 
   await require('./services/bootstrapAdmin').onStartup();
+  // Diagnostic runs independently and cannot enable scanners or block readiness.
+  require('./services/upstoxStartupCheck').runCheck().catch(()=>{
+    console.warn('[upstox-check] UPSTOX_CONNECTIVITY_CHECK_FAILED');
+  });
 
   if (ENABLE_INTRADAY || ENABLE_SWING) marketLease = await require('./services/scannerOwnership').ensure({onLost:()=>{process.exitCode=1;shutdown();}});
   if (market.name === 'upstox') {

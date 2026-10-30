@@ -361,3 +361,17 @@ at `/login`. Remove all three bootstrap variables and save/redeploy. If accounts
 already exist, startup skips creation and does not change passwords or roles. The
 existing SQL bootstrap RPC serializes concurrent creation. Failures log sanitized
 configuration guidance. No public bootstrap endpoint or new migration is added.
+
+## Render free plan: read-only Upstox connectivity check
+
+Set `UPSTOX_CHECK_ON_START=true` temporarily with the real backend token and
+redeploy. This invokes the existing `check-upstox.js` script in a bounded child
+process without changing provider or enabling scanning. Search runtime logs for
+`[upstox-check]`. A successful report contains `authenticated:true` and RELIANCE /
+NIFTY quote and completed daily / five-minute candle samples. Failure prints an
+allowlisted error code or a generic failure; raw subprocess output is never logged.
+The timeout is three minutes and failures do not take down the app. Remove the flag
+after the check to avoid repeating requests on each restart. Run during an NSE
+session after completed five-minute candles exist: stale market data may fail
+the current strict freshness checks outside that window. This does not verify
+screening parity, metadata, streaming, calendar accuracy or data-use permissions.
