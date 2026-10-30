@@ -1,4 +1,4 @@
-const CACHE_NAME = 'market-scanner-shell-v6';
+const CACHE_NAME = 'market-scanner-shell-v7';
 const APP_SHELL = [
   '/assets/workspace.css',
   '/assets/workspace.js',

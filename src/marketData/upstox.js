@@ -13,7 +13,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const dayBefore = key => new Date(Date.parse(`${key}T00:00:00Z`) - 86400000).toISOString().slice(0,10);
 class RequestBudget {
   constructor({ clock = Date.now, sleep = delay, limits = [[1000,40],[60000,450],[1800000,1800]] } = {}) { this.clock=clock;this.sleep=sleep;this.limits=limits;this.times=[];this.chain=Promise.resolve(); }
-  take() { const operation=this.chain.then(async()=>{for(;;){const now=this.clock();this.times=this.times.filter(t=>now-t<1800000);let wait=0;for(const [window,max] of this.limits){const xs=this.times.filter(t=>now-t<window);if(xs.length>=max)wait=Math.max(wait,xs[xs.length-max]+window-now);}if(!wait){this.times.push(now);return;}await this.sleep(wait+1);}});this.chain=operation.catch(()=>{});return operation; }
+  take({onWait=()=>{}}={}) { const operation=this.chain.then(async()=>{for(;;){const now=this.clock();this.times=this.times.filter(t=>now-t<1800000);let wait=0;for(const [window,max] of this.limits){const xs=this.times.filter(t=>now-t<window);if(xs.length>=max)wait=Math.max(wait,xs[xs.length-max]+window-now);}if(!wait){this.times.push(now);return;}onWait(now+wait+1);await this.sleep(wait+1);}});this.chain=operation.catch(()=>{});return operation; }
 }
 function normalize(rows) {
  if(!Array.isArray(rows))throw new Error('UPSTOX_INVALID_CANDLES');
@@ -32,8 +32,12 @@ class UpstoxProvider {
  }
  async request(route,params={}){
   if(!this.token)throw new Error('UPSTOX_TOKEN_MISSING');if(this.blocked)throw new Error('UPSTOX_AUTH_REJECTED_ROTATE_TOKEN');
-  for(let attempt=0;attempt<3;attempt++){await this.budget.take();try{const response=await this.transport({method:'GET',url:'https://api.upstox.com'+route,params,headers:{Authorization:`Bearer ${this.token}`,Accept:'application/json'},timeout:12000});if(response.data?.status!=='success')throw new Error('UPSTOX_INVALID_RESPONSE');this.health={...this.health,provider:'upstox',status:'available',lastSuccess:this.clock().toISOString(),lastError:null};return response.data.data;
-   }catch(error){const status=error.response?.status;this.health.status='unavailable';this.health.lastError=status?`HTTP_${status}`:'NETWORK_OR_INVALID_RESPONSE';if(status===401||status===403){this.blocked=true;throw new Error('UPSTOX_AUTH_REJECTED_ROTATE_TOKEN');}if(status&&status!==429&&status<500)throw new Error(`UPSTOX_HTTP_${status}`);if(attempt===2)throw new Error('UPSTOX_REQUEST_FAILED');const header=error.response?.headers?.['retry-after'];let ms=Number(header)*1000;if(!Number.isFinite(ms)&&header)ms=Date.parse(header)-Date.now();await this.sleep(Math.max(Number.isFinite(ms)?ms:0,500*2**attempt+Math.floor(Math.random()*200)));}
+  for(let attempt=0;attempt<3;attempt++){await this.budget.take({onWait:until=>{this.health.wait={reason:'request-budget',until:new Date(until).toISOString()};}});delete this.health.wait;try{const response=await this.transport({method:'GET',url:'https://api.upstox.com'+route,params,headers:{Authorization:`Bearer ${this.token}`,Accept:'application/json'},timeout:12000});if(response.data?.status!=='success')throw new Error('UPSTOX_INVALID_RESPONSE');this.health={...this.health,provider:'upstox',status:'available',lastSuccess:this.clock().toISOString(),lastError:null};return response.data.data;
+   }catch(error){const status=error.response?.status;this.health.status='unavailable';this.health.lastError=status?`HTTP_${status}`:'NETWORK_OR_INVALID_RESPONSE';if(status===401||status===403){this.blocked=true;throw new Error('UPSTOX_AUTH_REJECTED_ROTATE_TOKEN');}if(status&&status!==429&&status<500)throw new Error(`UPSTOX_HTTP_${status}`);if(attempt===2)throw new Error('UPSTOX_REQUEST_FAILED');const header=error.response?.headers?.['retry-after'];let ms=Number(header)*1000;if(!Number.isFinite(ms)&&header)ms=Date.parse(header)-this.clock().getTime();
+    // Never retry earlier than Retry-After. Long waits fail explicitly so the
+    // operator can retry later instead of leaving preparation apparently hung.
+    if(Number.isFinite(ms)&&ms>30000)throw new Error('UPSTOX_RETRY_WAIT_EXCEEDED');
+    const wait=Math.max(Number.isFinite(ms)?ms:0,500*2**attempt+Math.floor(Math.random()*200));this.health.wait={reason:'retry-after',until:new Date(this.clock().getTime()+wait).toISOString()};await this.sleep(wait);delete this.health.wait;}
   }
  }
  async master(){

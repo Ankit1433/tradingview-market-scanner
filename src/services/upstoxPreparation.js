@@ -1,10 +1,10 @@
 const {details}=require('../operations/failureDetails');
 const db=require('./supabaseStore');
-let job=null,controller=null,publicState={state:'idle',phase:null},restored=false;
-function errorCode(error){const code=error?.message;const known=new Set(['UPSTOX_UNIVERSE_METADATA_STALE_OR_UNVERIFIED','UPSTOX_UNIVERSE_METADATA_INVALID','UPSTOX_METADATA_DATE_INVALID','UPSTOX_PREPARATION_CANCELLED','UPSTOX_METADATA_SOURCE_ATTESTATION_REQUIRED','UPSTOX_METADATA_REPORT_NOT_PUBLISHED','UPSTOX_METADATA_SOURCE_FORBIDDEN','UPSTOX_METADATA_SOURCE_UNAVAILABLE','UPSTOX_METADATA_SCHEMA_CHANGED','UPSTOX_METADATA_ARCHIVE_INVALID','UPSTOX_METADATA_CSV_INVALID','UPSTOX_METADATA_DATE_INVALID','UPSTOX_METADATA_DATE_MISMATCH','UPSTOX_METADATA_REPORT_MISSING','UPSTOX_METADATA_DUPLICATE_OR_INVALID_SYMBOL','UPSTOX_METADATA_VALUE_OR_UNIT_INVALID','UPSTOX_METADATA_EMPTY','UPSTOX_SECTOR_METADATA_MISSING','UPSTOX_UNIVERSE_COVERAGE_INCOMPLETE','UPSTOX_COMPARISON_BASELINE_INVALID','UPSTOX_COMPARISON_BASELINE_UNAVAILABLE','UPSTOX_COMPARISON_CAPTURE_EXPIRED','UPSTOX_CORPORATE_ACTION_REVIEW_REQUIRED','UPSTOX_CORPORATE_ACTION_DATA_INVALID','UPSTOX_CORPORATE_ACTION_ISIN_INVALID']);return known.has(code)?code:details(error,'configuration').code;}
+let activeProvider=null,job=null,controller=null,publicState={state:'idle',phase:null},restored=false;
+function errorCode(error){const code=error?.message;const known=new Set(['UPSTOX_RETRY_WAIT_EXCEEDED','UPSTOX_UNIVERSE_METADATA_STALE_OR_UNVERIFIED','UPSTOX_UNIVERSE_METADATA_INVALID','UPSTOX_METADATA_DATE_INVALID','UPSTOX_PREPARATION_CANCELLED','UPSTOX_METADATA_SOURCE_ATTESTATION_REQUIRED','UPSTOX_METADATA_REPORT_NOT_PUBLISHED','UPSTOX_METADATA_SOURCE_FORBIDDEN','UPSTOX_METADATA_SOURCE_UNAVAILABLE','UPSTOX_METADATA_SCHEMA_CHANGED','UPSTOX_METADATA_ARCHIVE_INVALID','UPSTOX_METADATA_CSV_INVALID','UPSTOX_METADATA_DATE_INVALID','UPSTOX_METADATA_DATE_MISMATCH','UPSTOX_METADATA_REPORT_MISSING','UPSTOX_METADATA_DUPLICATE_OR_INVALID_SYMBOL','UPSTOX_METADATA_VALUE_OR_UNIT_INVALID','UPSTOX_METADATA_EMPTY','UPSTOX_SECTOR_METADATA_MISSING','UPSTOX_UNIVERSE_COVERAGE_INCOMPLETE','UPSTOX_COMPARISON_BASELINE_INVALID','UPSTOX_COMPARISON_BASELINE_UNAVAILABLE','UPSTOX_COMPARISON_CAPTURE_EXPIRED','UPSTOX_CORPORATE_ACTION_REVIEW_REQUIRED','UPSTOX_CORPORATE_ACTION_DATA_INVALID','UPSTOX_CORPORATE_ACTION_ISIN_INVALID']);return known.has(code)?code:details(error,'configuration').code;}
 async function status(){
  if(!job&&!restored&&db.status().connected){restored=true;try{const saved=await db.loadState('upstox-preparation-report');if(saved?.payload){publicState=saved.payload;if(publicState.state==='running')publicState={...publicState,state:'interrupted',note:'Previous process stopped; retry resumes cached metadata'};}}catch(_){restored=false;}}
- return publicState;
+ return publicState.state==='running'?{...publicState,wait:activeProvider?.health?.wait||null}:publicState;
 }
 function start({provider,prepare,compare,acquire,env=process.env,store=db,clock=()=>new Date()}={}){
  if(job)return {started:false,state:publicState};
@@ -19,7 +19,7 @@ function start({provider,prepare,compare,acquire,env=process.env,store=db,clock=
   let lease;
   try{
    lease=await (acquire||require('../marketData/ownership').acquire)({key:'ankquant-market-workers',signal,onLost:()=>currentController.abort()});
-   const p=provider||require('../marketData/upstox').getProvider();
+   const p=provider||require('../marketData/upstox').getProvider();activeProvider=p;
    publicState={...publicState,phase:'metadata'};await save();
    const manifest=await (prepare||require('../marketData/universe').prepareUniverse)(p,{env,signal,onProgress:progress=>{publicState={...publicState,progress};}});
    if(signal.aborted)throw Error('UPSTOX_PREPARATION_CANCELLED');
@@ -34,7 +34,7 @@ function start({provider,prepare,compare,acquire,env=process.env,store=db,clock=
    publicState={...publicState,state:'failed',phase:publicState.phase,code:errorCode(error),finishedAt:clock().toISOString()};
    try{const p=provider||require('../marketData/upstox').getProvider();const partial=await p.read('universe-preparation');if(partial?.manifest?.coverage){publicState.coverage=partial.manifest.coverage;publicState.coverageAsOf=partial.manifest.asOf;}}catch(_){}
    await save().catch(()=>{});
-  }finally{await lease?.stop();job=null;controller=null;}
+  }finally{await lease?.stop();job=null;controller=null;activeProvider=null;}
  })();
  return {started:true,state:publicState};
 }

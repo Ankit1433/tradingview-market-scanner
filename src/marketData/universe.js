@@ -95,8 +95,12 @@ async function prepareUniverse(provider,{now=provider.clock(),transport=axios,en
   if(bySymbol.has(item.trading_symbol))fail('UPSTOX_INSTRUMENT_MISSING_OR_AMBIGUOUS');bySymbol.set(item.trading_symbol,item);
  }
  const records=new Map(report.rows.map(row=>[row.symbol,row]));const stocks=[],excluded=[];let processed=0;
+ const progress=(currentSymbol=null)=>onProgress({processed,examined:processed,total:bySymbol.size,included:stocks.length,excluded:excluded.length,currentSymbol,updatedAt:provider.clock().toISOString()});
+ progress();
  for(const [symbol,item]of [...bySymbol].sort(([a],[b])=>a.localeCompare(b))){
   if(signal?.aborted)fail('UPSTOX_PREPARATION_CANCELLED');
+  progress(symbol);
+  try {
   const row=records.get(symbol);
   if(!row){excluded.push({symbol,reason:'NSE_EQ_METADATA_MISSING'});continue;}
   if(row.unavailable){excluded.push({symbol,reason:row.unavailable});continue;}
@@ -108,7 +112,7 @@ async function prepareUniverse(provider,{now=provider.clock(),transport=axios,en
    profile={fetchedAt:provider.clock().getTime(),sector:data.sector.trim(),source:'Upstox /v2/fundamentals/:isin/profile'};await provider.persist(key,profile);
   }
   stocks.push({...row,isin,instrumentKey:item.instrument_key,sector:profile.sector,eligible:true,provenance:{marketCap:report.source,marketCapDate:date,marketCapUnit:'INR',sector:profile.source}});
-  if(++processed%50===0)onProgress({processed,total:bySymbol.size});
+  } finally { processed++; progress(); }
  }
  if(signal?.aborted)fail('UPSTOX_PREPARATION_CANCELLED');
  const universeKey=crypto.createHash('sha256').update(JSON.stringify(stocks.map(r=>[r.symbol,r.isin]))).digest('hex');

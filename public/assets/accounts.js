@@ -18,7 +18,7 @@
  if($('upstox-panel')){
   $('upstox-panel').hidden=me.role!=='admin';
   if(me.role==='admin'){
-   const renderSetup=data=>{$('upstox-status').textContent=`${data.state} · ${data.phase||'not started'}${data.code?' · '+data.code:''}. Scanning stays controlled by Render settings.`;$('upstox-report').textContent=JSON.stringify(data,null,2);};
+   const renderSetup=data=>{$('upstox-status').textContent=`${data.state} · ${data.phase||'not started'}${data.code?' · '+data.code:''}${data.progress?.examined!==undefined?' · Examined '+data.progress.examined+'/'+data.progress.total+' · Included '+data.progress.included+' · Excluded '+data.progress.excluded+(data.progress.currentSymbol?' · Checking '+data.progress.currentSymbol:'')+' · Updated '+data.progress.updatedAt:''}${data.wait?' · Waiting: '+data.wait.reason+' until '+data.wait.until:''}. Scanning stays controlled by Render settings.`;$('upstox-report').textContent=JSON.stringify(data,null,2);};
    $('upstox-report-form').addEventListener('submit',protect(async event=>{
     const form=event.currentTarget,file=form.elements.reportFile.files[0],message=$('upstox-import-status');message.textContent='Importing NSE report…';
     try{
