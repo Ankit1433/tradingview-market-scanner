@@ -69,6 +69,8 @@ async function initializeStorageAndLoops() {
     await paperTradeStore.hydrateIntradayPositions();
   }
 
+  await require('./services/bootstrapAdmin').onStartup();
+
   if (ENABLE_INTRADAY || ENABLE_SWING) marketLease = await require('./services/scannerOwnership').ensure({onLost:()=>{process.exitCode=1;shutdown();}});
   if (market.name === 'upstox') {
     if (!process.env.UPSTOX_ACCESS_TOKEN) throw new Error('UPSTOX_TOKEN_MISSING');

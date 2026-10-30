@@ -344,3 +344,20 @@ For `APP_ORIGIN is required for private production hosting`, set `APP_ORIGIN` an
 then save and redeploy. Keep private mode enabled. Docker services use the Node
 version in Dockerfile, not Render native-runtime Node settings. The image includes
 `scripts/` for admin bootstrap and uses `/healthz` for unauthenticated liveness.
+
+## Render free plan: first admin without Shell
+
+After applying the account migration and configuring backend Supabase credentials,
+add these temporary Render environment values:
+
+```dotenv
+BOOTSTRAP_ADMIN_ON_START=true
+BOOTSTRAP_ADMIN_EMAIL=<your email>
+BOOTSTRAP_ADMIN_PASSWORD=<unique password, 12–128 characters>
+```
+
+Save and deploy. Look for `Initial admin created` in runtime logs, then sign in
+at `/login`. Remove all three bootstrap variables and save/redeploy. If accounts
+already exist, startup skips creation and does not change passwords or roles. The
+existing SQL bootstrap RPC serializes concurrent creation. Failures log sanitized
+configuration guidance. No public bootstrap endpoint or new migration is added.

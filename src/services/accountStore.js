@@ -13,6 +13,7 @@ module.exports={
  userByEmail:email=>one('app_users',{email:`eq.${email}`}),
  user:id=>one('app_users',{id:`eq.${id}`}),
  register:(email,password,code)=>request('post','rpc/app_register',null,{p_email:email,p_password_hash:password,p_code_hash:code}),
+ firstUser:()=>one('app_users',{select:'id'}),
  bootstrap:(email,password)=>request('post','rpc/app_bootstrap',null,{p_email:email,p_password_hash:password}),
  invite:row=>request('post','app_invites',null,row),
  session:hash=>one('app_sessions',{token_hash:`eq.${hash}`,expires_at:`gt.${new Date().toISOString()}`}),
