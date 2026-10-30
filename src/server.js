@@ -16,6 +16,7 @@ function createServer({ accountStore = require('./services/accountStore') } = {}
   // proxy's own address and effectively rate-limits the whole world as one user.
   app.set('trust proxy', 1);
   app.disable('x-powered-by');
+  app.use(require('./operations/log').middleware);
 
   app.use(express.json({ limit: '100kb' }));
 
@@ -105,6 +106,7 @@ function createServer({ accountStore = require('./services/accountStore') } = {}
   app.get('/api/docs.json', (req, res) => res.json(spec));
   app.get('/api/docs', (req, res) => res.type('html').send(DOCS_HTML));
 
+  app.get('/api/admin/metrics',require('./middleware/auth').requireKey,(req,res)=>res.json({counts:require('./operations/log').snapshot(),uptimeSeconds:Math.floor(process.uptime()),memoryBytes:process.memoryUsage().rss,push:require('./services/pushClient').getStats(),marketData:require('./marketData').status()}));
   app.use('/api/ingest', ingestRoutes);
   app.use('/api/public', publicRoutes);
   app.use('/api/scanner', scannerRoutes);

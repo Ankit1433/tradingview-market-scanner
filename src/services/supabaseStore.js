@@ -249,7 +249,13 @@ async function* iterateSignalEvents() {
  const res=await request('get','signal_events',{params});for(const row of res.data)yield row;
  if(res.data.length<1000)break;cursor=res.data.at(-1).event_key;}
 }
+async function insertSignalEvent(row){const res=await request('post','signal_events',{params:{on_conflict:'event_key'},data:row,headers:{Prefer:'resolution=ignore-duplicates,return=representation'}});return res.data.length>0;}
+function destination(){return require('crypto').createHash('sha256').update(process.env.PUSH_URL||'').digest('hex');}
+async function persistSignalDelivery(record,execute=request){const row=require('../state/signalJournal').toDatabaseRow(record);await execute('post','rpc/persist_signal_delivery',{data:{p_row:row,p_payload:record,p_destination:destination()}});}
+async function loadSignalOutbox(){const rows=[];for(let offset=0;;offset+=500){const page=await request('get','signal_outbox',{params:{destination:`eq.${destination()}`,select:'payload',order:'created_at.asc,event_key.asc',limit:500,offset}});rows.push(...page.data.map(r=>r.payload));if(page.data.length<500)return rows;}}
+async function acknowledgeSignals(keys,execute=request){for(const key of keys)await execute('delete','signal_outbox',{params:{destination:`eq.${destination()}`,event_key:`eq.${key}`}});}
 module.exports = {
+ insertSignalEvent,persistSignalDelivery,loadSignalOutbox,acknowledgeSignals,
   request,
   upsertOutcome, loadOutcomes, iterateSignalEvents,
   connect,

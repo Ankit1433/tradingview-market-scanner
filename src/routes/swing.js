@@ -166,12 +166,12 @@ router.get("/analyze/:symbol", async (req, res) => {
 });
 
 /** Force a scan now, ignoring the schedule and the already-ran-today guard. */
-router.post("/admin/scan", requireKey, async (req, res) => {
+router.post("/admin/scan", requireKey, require("../services/scannerOwnership").guard, async (req, res) => {
   const result = await swingLoop.runSwingScan({ force: true });
   res.json({ ran: result !== null, result });
 });
 
-router.post("/admin/start", requireKey, (req, res) => {
+router.post("/admin/start", requireKey, require("../services/scannerOwnership").guard, (req, res) => {
   swingLoop.start();
   res.json({ started: true });
 });

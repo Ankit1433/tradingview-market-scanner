@@ -54,7 +54,7 @@ router.get('/signals/:type', (req, res) => {
   res.json({ type: req.params.type, stocks: [...state[key]] });
 });
 
-router.post('/admin/start', requireKey, async (req, res) => {
+router.post('/admin/start', requireKey, require('../services/scannerOwnership').guard, async (req, res) => {
   await scanLoop.start();
   res.json({ started: true });
 });

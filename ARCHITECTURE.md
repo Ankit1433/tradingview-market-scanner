@@ -101,7 +101,7 @@ The UI service worker caches static assets only, not authenticated HTML/API resp
 | 4: Personal paper journal | Implemented; live Telegram/database checks remain |
 | 5: UI | Implemented; fixture browser flow verified; live integration/full accessibility audit remain |
 | 6: Reliability | Partial: scheduled keepalive exists; durable outbox, replica ownership, broader validation/logging/metrics/backup/shutdown hardening remain |
-| 7: CI and load testing | Not complete; local suites/browser smoke tests exist |
+| 7: CI and load testing | Implemented Actions, Playwright, contracts and 50-client SSE regression; remote/staging execution remains unverified |
 | 8: Upstox migration | Proposed only; TradingView remains active |
 
 No broker orders, automated trading or cross-user leaderboards are implemented. Test results from earlier work establish local/fixture behavior, not production deployment state. This snapshot involved source inspection and documentation checks only; no new application tests or deployment actions were performed.

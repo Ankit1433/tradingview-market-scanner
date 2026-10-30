@@ -1,0 +1,2 @@
+const {defineConfig,devices}=require('@playwright/test');
+module.exports=defineConfig({testDir:'./tests/e2e',fullyParallel:false,workers:1,retries:process.env.CI?1:0,timeout:30000,expect:{timeout:10000},reporter:[['list'],['html',{open:'never'}]],outputDir:'test-results',use:{trace:'retain-on-failure',screenshot:'only-on-failure',...(process.env.CHROMIUM_PATH?{launchOptions:{executablePath:process.env.CHROMIUM_PATH}}:{})},projects:[{name:'desktop-chromium',use:{...devices['Desktop Chrome']}},{name:'mobile-chromium',use:{...devices['Pixel 7']}}]});

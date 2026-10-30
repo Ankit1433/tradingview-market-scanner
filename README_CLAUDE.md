@@ -303,3 +303,11 @@ The phase8-upstox branch adds a selectable REST/provider/diagnostic-stream adapt
 ## Phase 3 private alerts
 
 Preference enforcement, durable daily-capped/deduped queues, digests, private bot controls, per-chat cooldown/retry and admin outage notifications are implemented. See [PHASE3.md](PHASE3.md) for the migration, worker placement, controls and live-verification limits. Live Telegram/Supabase checks remain unverified.
+
+## Phase 6 reliability update
+
+Database-transactional signal/outbox persistence, concurrent ingest insertion, scanner coordination, startup validation, JSON request logs, protected metrics, signal-journal backup/restore and shutdown draining are implemented. See [PHASE6.md](PHASE6.md) for the additive migration and precise acceptance/SSE/recovery limits. Live PostgreSQL and crash-recovery qualification remain unverified.
+
+## Phase 7 tests and CI
+
+GitHub Actions, desktop/mobile Playwright flows, canonical API contract checks and a 50-client SSE load regression are implemented. See [PHASE7.md](PHASE7.md) for commands, artifacts, coverage limits and how to verify the first remote run. Real GitHub execution and staging capacity remain unverified until run.

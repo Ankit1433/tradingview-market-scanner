@@ -543,3 +543,11 @@ Preference enforcement, durable daily-capped/deduped queues, digests, private bo
 [SETUP_STEP_BY_STEP.md](SETUP_STEP_BY_STEP.md) lists the websites to open, SQL files
 to run in order, local/Render/scanner environment settings, commands, Telegram and
 cron-job.org setup, user acceptance checks, and the guarded Upstox migration steps.
+
+## Phase 6 reliability update
+
+Database-transactional signal/outbox persistence, concurrent ingest insertion, scanner coordination, startup validation, JSON request logs, protected metrics, signal-journal backup/restore and shutdown draining are implemented. See [PHASE6.md](PHASE6.md) for the additive migration and precise acceptance/SSE/recovery limits. Live PostgreSQL and crash-recovery qualification remain unverified.
+
+## Phase 7 tests and CI
+
+GitHub Actions, desktop/mobile Playwright flows, canonical API contract checks and a 50-client SSE load regression are implemented. See [PHASE7.md](PHASE7.md) for commands, artifacts, coverage limits and how to verify the first remote run. Real GitHub execution and staging capacity remain unverified until run.

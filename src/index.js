@@ -1,4 +1,5 @@
 require('dotenv').config();
+require('./config/validate').validate();
 
 const { createServer } = require('./server');
 const { start, stop } = require('./jobs/scanLoop');
@@ -68,12 +69,13 @@ async function initializeStorageAndLoops() {
     await paperTradeStore.hydrateIntradayPositions();
   }
 
+  if (ENABLE_INTRADAY || ENABLE_SWING) marketLease = await require('./services/scannerOwnership').ensure({onLost:()=>{process.exitCode=1;shutdown();}});
   if (market.name === 'upstox') {
     if (!process.env.UPSTOX_ACCESS_TOKEN) throw new Error('UPSTOX_TOKEN_MISSING');
     if ((ENABLE_INTRADAY || ENABLE_SWING) && (process.env.UPSTOX_SCREENING_APPROVED !== 'true' || !process.env.UPSTOX_UNIVERSE_FILE)) throw new Error('UPSTOX_SCREENING_PARITY_APPROVAL_AND_METADATA_REQUIRED');
     if (ENABLE_INTRADAY || ENABLE_SWING) {
       if (!supabaseStore.status().connected) throw new Error('UPSTOX_WORKERS_REQUIRE_DATABASE_LEASE');
-      marketLease = await require('./marketData/ownership').acquire({ onLost: () => { console.error('[market] ownership lost; stopping workers'); shutdown(); } });
+
       if (process.env.UPSTOX_STREAM_ENABLED === 'true') {
         marketFeed = new (require('./marketData/feed').Feed)({ provider: market.provider() });
         const names=(process.env.UPSTOX_STREAM_SYMBOLS || 'NIFTY').split(',').map(s=>s.trim()).filter(Boolean);
@@ -111,10 +113,15 @@ async function initializeStorageAndLoops() {
 }
 
 initializeStorageAndLoops().catch((e) => {
-  console.error('Storage initialization failed; scanner loops were not started:', e);
+  require('./operations/log').log('error','startup_failed',{error:e});
+  process.exitCode=1;shutdown();
 });
 
+let shuttingDown=false;
 async function shutdown() {
+  if(shuttingDown)return;shuttingDown=true;
+  closeAll();
+  const httpClosed=new Promise(resolve=>server.close(resolve));
   console.log('\nShutting down...');
   const deadline=setTimeout(()=>process.exit(1),10000);deadline.unref();
   marketFeed?.stop();
@@ -128,7 +135,9 @@ async function shutdown() {
   closeAll();
   await closeClient();
   await marketLease?.stop();
-  server.close(() => process.exit(0));
+  server.closeIdleConnections?.();
+  await httpClosed;
+  process.exit(process.exitCode||0);
   // force-exit if something hangs
   setTimeout(() => process.exit(0), 3000).unref();
 }

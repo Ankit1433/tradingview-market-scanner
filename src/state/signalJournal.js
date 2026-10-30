@@ -170,7 +170,7 @@ function rotateIfNeeded() {
  * @param {object} [entry.levels]    entry/stop/target/rr where known
  * @param {object} [entry.context]   sector, change%, atr, rsi etc.
  */
-function record(entry) {
+function record(entry, { persist = true } = {}) {
   if (!loaded) load();
 
   const record_ = normalizeRecord({
@@ -198,10 +198,8 @@ function record(entry) {
     console.error(`[journal] append failed: ${e.message}`);
   }
 
-  if (supabaseStore.status().connected) {
-    supabaseStore.enqueue('signal write', () =>
-      supabaseStore.upsertSignalEvents([toDatabaseRow(record_)]),
-    );
+  if (persist && supabaseStore.status().connected) {
+    supabaseStore.enqueue('signal write', () => process.env.PUSH_URL ? supabaseStore.persistSignalDelivery(record_) : supabaseStore.upsertSignalEvents([toDatabaseRow(record_)]));
   }
 
   return record_;
@@ -298,4 +296,10 @@ async function* iterateAll() {
   for(const name of files){const lines=readline.createInterface({input:fs.createReadStream(path.join(DATA_DIR,name)),crlfDelay:Infinity});
    for await(const line of lines){let r;try{r=normalizeRecord(JSON.parse(line));}catch(_){continue;}if(!seen.has(r.eventKey)){seen.add(r.eventKey);yield r;}}}
 }
-module.exports = { iterateAll, load, hydrateFromSupabase, record, hasEvent, query, stats, reset, JOURNAL_FILE };
+const ingestLocks=new Map();
+async function ingest(entry){const normalized=normalizeRecord(entry),key=normalized.eventKey;const prior=ingestLocks.get(key)||Promise.resolve();const task=prior.catch(()=>{}).then(async()=>{
+ if(supabaseStore.status().connected){if(!await supabaseStore.insertSignalEvent(toDatabaseRow(normalized)))return {inserted:false};return {inserted:true,record:record(normalized,{persist:false})};}
+ for await(const existing of iterateAll())if(existing.eventKey===key)return {inserted:false};
+ return {inserted:true,record:record(normalized)};
+ });ingestLocks.set(key,task);try{return await task;}finally{if(ingestLocks.get(key)===task)ingestLocks.delete(key);}}
+module.exports = { normalizeRecord,toDatabaseRow,ingest,iterateAll, load, hydrateFromSupabase, record, hasEvent, query, stats, reset, JOURNAL_FILE };

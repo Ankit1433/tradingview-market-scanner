@@ -2,7 +2,7 @@
 
 This guide is for the combined implementation on `phase8-upstox`. A local commit is
 not a GitHub push or deployment. Phases 0–5 have code/tests, Phase 6 is partial,
-Phase 7 CI/load work remains, and Phase 8 is guarded/partially implemented.
+Phase 7 CI/load tooling is implemented; the first GitHub-hosted run remains unverified, and Phase 8 is guarded/partially implemented.
 Real Supabase/Telegram/Upstox checks remain necessary. Do the staging checks before
 inviting friends. No broker orders are placed.
 
@@ -39,6 +39,7 @@ and run it **once, in this order**:
 4. `supabase/migrations/202610290001_alert_preferences.sql`
 5. `supabase/migrations/202610290002_worker_leases.sql`
 6. `supabase/migrations/202610290003_personal_alerts.sql`
+7. `supabase/migrations/202610290004_reliable_signal_delivery.sql`
 
 If an existing project already has some migrations applied, identify those first
 and apply only the missing ones. Some account statements are intentionally not
@@ -328,10 +329,9 @@ by this guide.
 ## 12. Remaining work after setup
 
 Phase 6 still needs full transactional outbox/concurrent-ingest guarantees, broader
-metrics/logging/validation, backup/restore and further hardening. Phase 7 CI and load
+metrics/logging/validation, backup/restore and further hardening. Phase 7 tooling is implemented; GitHub-hosted execution and real staging/load
 qualification remain. Phase 8 metadata/parity, authenticated checks and controlled
-cutover remain. Backup your Supabase project and stage migrations; no automated
-backup/restore command has been implemented yet.
+cutover remain. Back up your Supabase project and stage migrations. Signal-only backup/restore commands now exist; see PHASE6.md for their scope and full-database backup limitations.
 
 Useful guides: PHASE1.md, PERSONAL_JOURNAL.md, PHASE3.md, PHASE5.md, KEEPALIVE.md,
 UPSTOX_MIGRATION.md, ARCHITECTURE.md and FUTURE_ARCHITECTURE.md. The future diagram

@@ -14,16 +14,15 @@
  *     time. A scan cycle can produce a dozen signals within a second, and a
  *     round-trip per signal from a home connection adds latency to the loop
  *     that actually matters.
- *   - The queue is bounded. If the remote is down for an hour, this drops the
- *     oldest entries rather than growing until the process runs out of memory.
- *     The local journal still has everything; the push is a convenience.
+ *   - Signals are persisted locally; configured database delivery also commits
+ *     journal events and outbox rows together before network transmission.
+ *     Acknowledged rows are deleted only after receiver acceptance.
  */
 
 const PUSH_URL = process.env.PUSH_URL || null;
 const PUSH_KEY = process.env.PUSH_API_KEY || process.env.API_KEY || null;
 const FLUSH_INTERVAL_MS = Number(process.env.PUSH_FLUSH_MS || 5000);
 const { createHeartbeat, intervalMs: HEARTBEAT_INTERVAL_MS } = require('../config/keepalive');
-const MAX_QUEUE = 500;
 const BATCH_SIZE = 50;
 const REQUEST_TIMEOUT_MS = 10000;
 
@@ -64,6 +63,7 @@ async function request(path, body) {
 /** Queue a signal for the next flush. Safe to call from anywhere. */
 function pushSignal(record) {
   if (!enabled) return;
+  record = require('../state/signalJournal').normalizeRecord(record);
 
   if (inFlightBatch.concat(queue).some(row => outbox.identity(row) === outbox.identity(record))) return;
 
@@ -71,7 +71,13 @@ function pushSignal(record) {
   persist();
 }
 
-async function flush() {
+let currentFlush = Promise.resolve();
+function flush() {
+  if (flushBusy) return currentFlush;
+  currentFlush = flushBatch();
+  return currentFlush;
+}
+async function flushBatch() {
   if (!enabled || queue.length === 0 || flushBusy) return;
   flushBusy = true;
 
@@ -79,9 +85,21 @@ async function flush() {
   inFlightBatch = batch;
 
   try {
+    await outbox.ensure(batch);
     const res = await request('/api/ingest/signals', { signals: batch });
 
-    if (res.ok || res.status === 207) {
+    if (res.status === 207) {
+      const response = await res.json();
+      const rejected = new Set((response.errors || []).map(e=>e.index));
+      if (!Array.isArray(response.errors) || response.accepted + response.rejected !== batch.length || rejected.size !== response.rejected || [...rejected].some(i=>!Number.isInteger(i)||i<0||i>=batch.length)) throw new Error('Invalid partial acknowledgement');
+      const delivered = batch.filter((_,i)=>!rejected.has(i));
+      await outbox.acknowledge(delivered);
+      queue = outbox.merge(batch.filter((_,i)=>rejected.has(i)).concat(queue));
+      stats.sent += delivered.length;
+      return;
+    }
+    if (res.ok) {
+      await outbox.acknowledge(batch);
       stats.sent += batch.length;
       if (consecutiveFailures > 0) {
         console.log(`[push] remote reachable again after ${consecutiveFailures} failure(s)`);
@@ -206,8 +224,9 @@ function stop() {
 
 /** Best-effort final flush on shutdown, so a clean restart doesn't lose the queue. */
 async function drain() {
-  if (!enabled) return;
   stop();
+  await currentFlush.catch(()=>{});
+  if (!enabled) return;
   const rounds = Math.ceil(queue.length / BATCH_SIZE);
   for (let i = 0; i < rounds && queue.length > 0; i++) {
     await flush();

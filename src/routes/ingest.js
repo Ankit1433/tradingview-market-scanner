@@ -94,17 +94,7 @@ router.post('/signals', requireKey, async (req, res) => {
     }
 
     try {
-      const validKey = typeof sig.eventKey === 'string' && /^[a-f0-9]{64}$/.test(sig.eventKey);
-      if (validKey) {
-        let exists = journal.hasEvent(sig);
-        const db = require('../services/supabaseStore');
-        if (!exists && db.status().connected) {
-          const response = await db.request('get','signal_events',{params:{select:'event_key',event_key:`eq.${sig.eventKey}`,limit:1}});
-          exists = response.data.length > 0;
-        }
-        if (exists) { accepted.push(sig.symbol); continue; }
-      }
-      const stored = journal.record({
+      const result = await journal.ingest({
         ...(typeof sig.ts === 'string' && Number.isFinite(Date.parse(sig.ts)) ? { ts: sig.ts } : {}),
         ...(typeof sig.eventKey === 'string' && /^[a-f0-9]{64}$/.test(sig.eventKey) ? { eventKey: sig.eventKey } : {}),
         mode: sig.mode,
@@ -115,8 +105,8 @@ router.post('/signals', requireKey, async (req, res) => {
         levels: sig.levels || null,
         context: sig.context || null,
       });
-      eventStream.broadcast('signal', stored);
-      accepted.push(stored.symbol);
+      if(result.inserted)eventStream.broadcast('signal', result.record);
+      accepted.push(sig.symbol.toUpperCase());
     } catch (e) {
       rejected.push({ index: i, symbol: sig.symbol, reason: e.message });
     }
