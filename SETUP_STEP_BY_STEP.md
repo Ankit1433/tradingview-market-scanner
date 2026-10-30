@@ -402,3 +402,12 @@ worker remains active throughout the timeout, startup fails with
 deleting active lease rows. Database failures remain fatal and now log the startup
 stage and sanitized resource / HTTP status. No migration or environment change
 is required for this code fix. This does not resolve Telegram network timeouts.
+
+## Complete Upstox data setup on free Render
+
+Follow [UPSTOX_DATA_SETUP.md](UPSTOX_DATA_SETUP.md). Remove the startup-check flag,
+keep ingest mode enabled, then use the admin-only **Upstox data setup** section at
+`/personal` to prepare sources and compare screeners. It includes a ZIP import
+fallback for NSE cloud-download failures. No Shell or additional migration is
+needed. Review actual coverage/exclusions/comparison results before applying the
+cutover settings. Source and screener equivalence are not inferred from fixtures.

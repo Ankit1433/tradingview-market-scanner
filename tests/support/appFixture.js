@@ -2,7 +2,7 @@
 const fs=require('fs'),os=require('os'),path=require('path');
 async function fixture(){
  const {passwordHash}=require('../../src/middleware/accounts');
- const users=new Map();for(const name of ['alice','bob'])users.set(name,{id:name,email:`${name}@example.test`,password_hash:await passwordHash('Fixture-password-123'),role:'friend',settings:{capital:100000,riskPct:1}});
+ const users=new Map();for(const name of ['alice','bob','admin'])users.set(name,{id:name,email:`${name}@example.test`,password_hash:await passwordHash('Fixture-password-123'),role:name==='admin'?'admin':'friend',settings:{capital:100000,riskPct:1}});
  const sessions=new Map();
  const accountStore={
   async userByEmail(email){return [...users.values()].find(u=>u.email===email);},async user(id){return users.get(id)||null;},

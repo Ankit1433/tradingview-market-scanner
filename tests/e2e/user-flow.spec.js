@@ -19,3 +19,14 @@ test('preferences remain owner-isolated; errors preserve editable form',async({p
  await page.route('**/api/account/preferences',route=>route.request().method()==='POST'?route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'Fixture persistence unavailable'})}):route.continue());
  await page.getByLabel('Maximum signal alerts per day').fill('3');await page.getByRole('button',{name:'Save preferences'}).click();await expect(page.locator('#page-status')).toContainText('Fixture persistence unavailable');await expect(page.getByRole('button',{name:'Save preferences'})).toBeEnabled();await page.reload();await expect(page.getByLabel('Maximum signal alerts per day')).toHaveValue('20');
 });
+
+test('admin can prepare Upstox data, inspect exclusions and import an NSE report',async({page})=>{
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ let starts=0,imports=0;const ready={state:'review-required',phase:'complete',comparison:{approved:false,excluded:[{symbol:'SPLITTEST',audit:{affected:[{type:'split',date:'2026-10-29'}]}}]}};
+ await page.route('**/api/account/admin/upstox',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(ready)}));
+ await page.route('**/api/account/admin/upstox/prepare',route=>{starts++;return route.fulfill({status:202,contentType:'application/json',body:'{"started":true}'});});
+ await page.route('**/api/account/admin/upstox/report',route=>{imports++;expect(route.request().headers()['content-type']).toBe('application/zip');expect(route.request().headers()['x-report-date']).toBe('2026-10-29');return route.fulfill({status:200,contentType:'application/json',body:'{"rows":1}'});});
+ await login(page,'admin@example.test');await expect(page.locator('#upstox-panel')).toBeVisible();
+ await page.getByRole('button',{name:'Prepare universe and compare'}).click();await expect(page.locator('#upstox-status')).toContainText('review-required');await expect(page.locator('#upstox-report')).toContainText('SPLITTEST');expect(starts).toBe(1);
+ await page.getByText('If NSE blocks the server download',{exact:true}).click();const form=page.locator('#upstox-report-form');await form.locator('[name=reportDate]').fill('2026-10-29');await form.locator('[name=reportFile]').setInputFiles({name:'PR291026.zip',mimeType:'application/zip',buffer:Buffer.from('fixture; parser tested separately')});await form.locator('[name=attested]').check();await page.getByRole('button',{name:'Import NSE report',exact:true}).click();await expect(page.locator('#account-status')).toContainText('NSE report imported');expect(imports).toBe(1);expect(errors).toEqual([]);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});

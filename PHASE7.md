@@ -22,12 +22,14 @@ against a test-only account-store fake and synthetic candle adapter. Each browse
 project has an isolated local fixture process. Browser requests outside that local
 origin are blocked. No database, broker or Telegram access is required.
 
-Four tests across desktop Chromium and Pixel-sized mobile Chromium verify:
+Six tests across desktop Chromium and Pixel-sized mobile Chromium now verify:
 
 1. Unauthenticated redirect, login, httpOnly/Strict session cookie, preference
    save/reload, signal journal, paper-entry link, logout and revoked access.
 2. A second user's preference isolation and an injected save error that leaves
    the form editable without persisting changes.
+3. Admin Upstox preparation controls, exclusion report rendering and NSE ZIP
+   import on desktop and mobile, with mocked upstream responses.
 
 Existing `npm run test:browser` remains an optional broader CDP smoke test for
 symbol markers, keyboard behavior and feed-error handling. CI's required browser

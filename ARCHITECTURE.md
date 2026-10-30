@@ -1,6 +1,6 @@
 # AnkQuant — current architecture
 
-Snapshot: 29 October 2026. Describes the implemented `work` checkout, including uncommitted changes. Production deployment, applied migrations and live integrations have not been verified.
+Snapshot: 30 October 2026. Describes code on `master`. Owner-provided Render logs verify API startup, Supabase restoration and Upstox quote/candle samples. The new source-preparation/comparison workflow is tested with fixtures; its live Fundamentals coverage and screener comparison must still run on Render.
 
 ```mermaid
 flowchart TD
@@ -105,3 +105,14 @@ The UI service worker caches static assets only, not authenticated HTML/API resp
 | 8: Upstox migration | Proposed only; TradingView remains active |
 
 No broker orders, automated trading or cross-user leaderboards are implemented. Test results from earlier work establish local/fixture behavior, not production deployment state. This snapshot involved source inspection and documentation checks only; no new application tests or deployment actions were performed.
+
+## Upstox preparation and quarantine
+
+Admin session → `/api/account/admin/upstox/prepare` → scanner lease → dated NSE
+MCAP archive + Upstox profile sectors → strict complete-coverage manifest →
+corporate-action audit / quarantine → warmed-history three-mode TradingView vs
+Upstox comparison → admin review. Metadata and reports use the existing
+`scanner_state` persistence; original ZIP import is the authenticated fallback.
+The preparer emits no operational signals. Actual scanning still requires the
+explicit provider/ingest/approval configuration; optional streaming remains
+separate. See UPSTOX_DATA_SETUP.md for contracts and limits.

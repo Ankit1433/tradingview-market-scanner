@@ -72,7 +72,7 @@ Both strategies cap sizing by risk and remaining allocated capital. The two book
 
 ## Architecture
 
-Single CommonJS Node.js service, with Express serving both the API and static pages. Main dependencies: Express, Axios, `@mathieuc/tradingview`, `@supabase/server`, dotenv, and node-cron. Runtime minimum is Node 18; `.node-version` pins 24.21.0.
+Single CommonJS Node.js service, with Express serving both the API and static pages. Main dependencies: Express, Axios, `@mathieuc/tradingview`, `@supabase/server`, dotenv, and node-cron. Runtime minimum is Node 22; `.node-version` pins 24.21.0.
 
 ```text
 TradingView screener HTTP + chart WebSocket
@@ -311,3 +311,15 @@ Database-transactional signal/outbox persistence, concurrent ingest insertion, s
 ## Phase 7 tests and CI
 
 GitHub Actions, desktop/mobile Playwright flows, canonical API contract checks and a 50-client SSE load regression are implemented. See [PHASE7.md](PHASE7.md) for commands, artifacts, coverage limits and how to verify the first remote run. Real GitHub execution and staging capacity remain unverified until run.
+
+### Upstox data preparation
+
+Admin `/personal` now provides source-based NSE MCAP / Upstox sector preparation,
+original-report ZIP import when cloud downloads fail, and read-only intraday /
+early / swing screener comparison reports. Structural-action histories are
+quarantined with visible reasons, as selected by the owner; no adjustment factors
+are guessed. Generated manifests recover via Supabase and require a completed
+comparison before operational use. Preparation does not change the provider or
+approve formula/data-use differences. See [UPSTOX_DATA_SETUP.md](UPSTOX_DATA_SETUP.md)
+for the Render workflow, cutover settings, source details and live checks still
+required. No new SQL migration or Upstox OAuth/order permission is introduced.

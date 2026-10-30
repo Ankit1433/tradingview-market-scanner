@@ -14,7 +14,7 @@ const {details}=require('./src/operations/failureDetails');
  const directory=fs.mkdtempSync(path.join(os.tmpdir(),'ankquant-calendar-gap-'));
  try{
   let dates=['2026-05-27','2026-05-29'];
-  const p=new UpstoxProvider({token:'fixture',clock:()=>new Date('2026-05-29T11:00:00Z'),instruments:[{segment:'NSE_EQ',instrument_type:'EQ',trading_symbol:'TEST',instrument_key:'NSE_EQ|TEST'}],cacheDir:directory,budget:{take:async()=>{}},transport:async()=>({data:{status:'success',data:{candles:dates.map(d=>[d+'T09:15:00+05:30',100,102,99,101,1000])}}})});
+  const p=new UpstoxProvider({corporateAudit:async()=>({status:'clear'}),token:'fixture',clock:()=>new Date('2026-05-29T11:00:00Z'),instruments:[{segment:'NSE_EQ',instrument_type:'EQ',trading_symbol:'TEST',instrument_key:'NSE_EQ|TEST'}],cacheDir:directory,budget:{take:async()=>{}},transport:async()=>({data:{status:'success',data:{candles:dates.map(d=>[d+'T09:15:00+05:30',100,102,99,101,1000])}}})});
   assert.equal((await p.history('TEST','D',2)).length,2);
   dates=['2026-05-26','2026-05-29'];p.memory.clear();fs.rmSync(p.cacheDir,{recursive:true,force:true});
   await assert.rejects(p.history('TEST','D',2),error=>{assert.equal(error.message,'UPSTOX_DAILY_CANDLE_GAP');assert.equal(error.expectedSession,'2026-05-27');assert.equal(details(error,'daily_RELIANCE').actualSession,'2026-05-29');return true;});

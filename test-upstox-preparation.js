@@ -1,0 +1,95 @@
+process.env.PRIVATE_MODE='false';
+const assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const {zipSync,strToU8}=require('fflate');
+const U=require('./src/marketData/universe');
+const A=require('./src/marketData/corporateActions');
+const S=require('./src/marketData/screening');
+const {UpstoxProvider}=require('./src/marketData/upstox');
+const {shadowCompare,assess,mapTv}=require('./src/marketData/shadowComparison');
+const {compare}=require('./scripts/compare-screener');
+const now=new Date('2026-10-30T06:00:00Z'),date='2026-10-29';
+const header='Trade Date,Symbol,Series,Security Name,Category,Last Trade Date,Face Value(Rs.),Issue Size,Close Price/Paid up value(Rs.),Market Cap(Rs.)';
+const csv=header+'\n29 Oct 2026,TEST,EQ,"Test, Limited",Listed,29 Oct 2026,10,100000000,100,10000000000\n';
+const zip=zipSync({'MCAP29102026.csv':strToU8(csv),'../../ignore.txt':strToU8('must not extract')});
+const instruments=[{segment:'NSE_EQ',instrument_type:'EQ',trading_symbol:'TEST',instrument_key:'NSE_EQ|INE000A01011',isin:'INE000A01011'}];
+let checks=0;function check(name,fn){fn();checks++;console.log('  ✓ '+name);}
+(async()=>{
+ check('NSE documented rupee units are preserved, with quoted CSV fields',()=>{const row=U.parseMcap(csv,date)[0];assert.equal(row.marketCap,1e10);assert.equal(row.issueSize,1e8);assert.equal(U.extractMcap(zip,date)[0].symbol,'TEST');});
+ check('bad schemas, missing members, duplicate symbols and wrong dates fail closed',()=>{assert.throws(()=>U.parseMcap('Symbol,MarketCap\nTEST,100',date),/SCHEMA/);assert.throws(()=>U.extractMcap(zip,'2026-10-28'),/REPORT_MISSING/);assert.throws(()=>U.parseMcap(csv+csv.split('\n')[1]+'\n',date),/DUPLICATE/);assert.throws(()=>U.parseMcap(csv,'2026-10-28'),/DATE_MISMATCH/);assert.throws(()=>U.parseMcap(csv.replace('10000000000','1000'),date),/UNIT/);assert.throws(()=>U.dateKey('31 Feb 2026'),/DATE_INVALID/);});
+ const {quoteIsFresh}=require('./src/marketData/quoteFreshness');
+ check('live quotes stay strict; closed sessions accept only final-session snapshots',()=>{assert(!quoteIsFresh({timestamp:'2026-10-30T05:58:00Z'},now));assert(quoteIsFresh({timestamp:'2026-10-30T09:59:00Z'},new Date('2026-10-30T10:15:00Z')));assert(quoteIsFresh({timestamp:'2026-10-30T09:59:00Z'},new Date('2026-11-01T06:00:00Z')));assert(!quoteIsFresh({timestamp:'2026-10-29T09:59:00Z'},new Date('2026-11-01T06:00:00Z')));assert(quoteIsFresh({timestamp:'2026-10-01T09:59:00Z'},new Date('2026-10-02T06:00:00Z')));});
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ankquant-prep-')),cache=new Map(),calls=[];
+ const provider={clock:()=>now,health:{},master:async()=>instruments,read:async key=>cache.get(key)||null,persist:async(key,value)=>cache.set(key,value),request:async(route)=>{calls.push(route);return {sector:'Technology',sector_market_cap_inr:{value:999999,unit:'crore'}};}};
+ const env={SWING_DATA_DIR:dir},transport=async options=>{assert.equal(options.url,U.reportUrl(date));assert.equal(options.headers.Authorization,undefined);return{data:zip};};
+ try{
+  const manifest=await U.prepareUniverse(provider,{env,transport});
+  check('full mapped equity coverage uses NSE company cap, never sector cap',()=>{assert.equal(manifest.coverage.expected,1);assert.equal(manifest.coverage.complete,true);assert.equal(manifest.stocks[0].marketCap,1e10);assert.equal(manifest.stocks[0].sector,'Technology');assert.equal(manifest.stocks[0].provenance.marketCapUnit,'INR');assert.equal(manifest.stocks[0].isin,'INE000A01011');assert.equal(fs.existsSync(U.filePath(env)),true);assert(!fs.existsSync(path.join(dir,'ignore.txt')));});
+  provider.master=async()=>[...instruments,{...instruments[0],trading_symbol:'FUNDTEST',isin:'INF000A01011',instrument_key:'NSE_EQ|INF000A01011'}];
+  const scoped=await U.prepareUniverse(provider,{env,transport});assert.equal(scoped.coverage.expected,1);assert.equal(scoped.coverage.scopeExclusions[0].symbol,'FUNDTEST');assert.equal(scoped.coverage.complete,true);provider.master=async()=>instruments;
+  check('EQ-series fund units are explicitly out of company scope, not fake sector rows',()=>assert.equal(scoped.scope,'NSE_EQ_EQ_COMPANY'));
+  await U.prepareUniverse(provider,{env,transport:()=>{throw Error('should use cache');}});check('warm metadata avoids source/profile refetch',()=>assert.equal(calls.length,1));
+  assert.equal((await U.loadManifest(provider,{env})).universeKey,manifest.universeKey);
+  fs.rmSync(U.filePath(env));assert.equal((await U.loadManifest(provider,{env})).universeKey,manifest.universeKey);
+  await assert.rejects(U.assertPrepared(provider,manifest),/COMPARISON_REQUIRED/);cache.set('launch-comparison',{universeKey:manifest.universeKey,comparison:{formulaVersion:S.FORMULA_VERSION,status:'review-required',asOf:now.toISOString(),captureWindow:{startedAt:now.toISOString(),finishedAt:now.toISOString()},modes:Object.fromEntries(['intraday','early','swing'].map(mode=>[mode,{comparisons:[],onlyBaseline:[],onlyCandidate:[]}]))}});await U.assertPrepared(provider,manifest);
+  const tomorrow={...provider,clock:()=>new Date('2026-11-02T06:00:00Z'),health:{}};let refreshes=0;
+  const fallback=await U.loadManifest(tomorrow,{env,refresh:true,prepare:async()=>{refreshes++;throw Error('UPSTOX_METADATA_SOURCE_UNAVAILABLE');}});assert.equal(fallback.asOf,manifest.asOf);assert.equal(tomorrow.health.metadataRefresh.status,'deferred');
+  await U.loadManifest(tomorrow,{env,refresh:true,prepare:async()=>{refreshes++;throw Error('not called during cooldown');}});assert.equal(refreshes,1);
+  const expired={...provider,clock:()=>new Date('2026-11-06T06:00:00Z'),health:{}};await assert.rejects(U.loadManifest(expired,{env,refresh:true,prepare:async()=>{throw Error('UPSTOX_METADATA_SOURCE_UNAVAILABLE');}}),/STALE_OR_UNVERIFIED/);
+  check('refresh failures preserve source dates and never extend the seven-day limit',()=>assert.equal(fallback.asOf,manifest.asOf));
+  const database=require('./src/services/supabaseStore'),oldStatus=database.status,oldLoad=database.loadState;
+  try{database.status=()=>({connected:true});database.loadState=async key=>key==='upstox:universe-v2'?{payload:{manifest}}:key==='upstox:launch-comparison'?{payload:cache.get('launch-comparison')}:null;
+   const restarted=new UpstoxProvider({token:'fixture',instruments,clock:()=>now,cacheDir:dir+'/empty-restart'});const recovered=await U.loadManifest(restarted,{env:{SWING_DATA_DIR:dir+'/empty-restart'}});assert.equal(recovered.universeKey,manifest.universeKey);await U.assertPrepared(restarted,recovered);
+  }finally{database.status=oldStatus;database.loadState=oldLoad;}
+  check('actual provider restores manifest and comparison through the simulated Supabase path',()=>assert(!fs.existsSync(dir+'/empty-restart/upstox/universe.json')));
+  check('missing/stale/duplicate metadata is rejected',()=>{assert.throws(()=>U.validateManifest({...manifest,asOf:'2020-01-01'},now));assert.throws(()=>U.validateManifest({...manifest,stocks:[manifest.stocks[0],manifest.stocks[0]]},now));assert.throws(()=>U.validateManifest({...manifest,stocks:[{...manifest.stocks[0],sector:''}]},now));});
+  const before=cache.get('universe-v2');provider.master=async()=>[...instruments,{...instruments[0],trading_symbol:'MISSING'}];await assert.rejects(U.prepareUniverse(provider,{env,transport}),/COVERAGE_INCOMPLETE/);assert.equal(cache.get('universe-v2'),before);assert.equal(cache.get('universe-preparation').manifest.coverage.excluded[0].symbol,'MISSING');provider.master=async()=>instruments;
+  check('incomplete coverage leaves last valid universe intact',()=>assert.equal(cache.get('universe-v2'),before));
+  await assert.rejects(U.importReport(provider,zip,date),/ATTESTATION/);await assert.rejects(U.importReport(provider,zip,'2026-10-31',{attested:true}),/DATE_INVALID/);assert.equal((await U.importReport(provider,zip,date,{attested:true})).rows,1);
+  const forbidden={...provider,read:async()=>null};await assert.rejects(U.loadReport(forbidden,date,{transport:async()=>{throw{response:{status:403}};}}),/SOURCE_FORBIDDEN/);
+  check('manual original-report import requires explicit provenance and completed date',()=>assert.equal(cache.get('nse-mcap:'+date).method,'admin-upload-from-NSE'));
+  check('structural/unknown actions exclude, future and old actions do not',()=>{const event=(name,expiry_date)=>({name,expiry_date});assert.equal(A.classify([event('Bonus','14 Oct 2026')],'2026-01-01',date).status,'excluded');assert.equal(A.classify([event('Rights','14 Oct 2026')],'2026-01-01',date).affected[0].type,'rights');assert.equal(A.classify([event('Merger','14 Oct 2026')],'2026-01-01',date).status,'excluded');assert.equal(A.classify([event('Split','14 Nov 2026'),event('Bonus','14 Oct 2025')],'2026-01-01',date).status,'clear');assert.equal(A.classify([event('Dividend','14 Oct 2026')],'2026-01-01',date).dividends,1);assert.throws(()=>A.classify([event('Split','bad')],'2026-01-01',date),/DATA_INVALID/);});
+  cache.delete('corporate-actions:INE000A01011');provider.request=async()=>[{name:'Split',expiry_date:'29 Oct 2026',ratio:'ambiguous'}];
+  const bars=[{time:Date.parse('2026-01-01T03:45:00Z')/1000},{time:Date.parse('2026-10-29T03:45:00Z')/1000}];await assert.rejects(A.auditHistory(provider,instruments[0],bars),e=>e.message==='UPSTOX_CORPORATE_ACTION_REVIEW_REQUIRED'&&e.audit.affected[0].type==='split');assert.equal(provider.health.corporateExclusions.TEST.status,'excluded');
+  provider.request=async()=>[{name:'Split',expiry_date:'01 Oct 2026'}];cache.delete('corporate-actions:INE000A01011');await assert.rejects(A.auditHistory(provider,instruments[0],[{time:Date.parse('2026-10-29T03:45:00Z')/1000}]),e=>e.audit.minimumLookbackSessions===250&&e.audit.affected[0].date==='2026-10-01');
+  provider.request=async()=>[];cache.delete('corporate-actions:INE000A01011');assert.equal((await A.auditHistory(provider,instruments[0],bars)).status,'clear');assert(!provider.health.corporateExclusions.TEST);
+  check('real history path enforces structural quarantine even on warm cache',()=>assert.equal(provider.health.corporateExclusions.TEST,undefined));
+  const raw=new UpstoxProvider({token:'fixture',instruments,clock:()=>now,cacheDir:dir+'/native'});raw.loadHistory=async()=>bars;raw.request=async()=>[{name:'Bonus',expiry_date:'29 Oct 2026'}];await assert.rejects(raw.history('TEST','D',250),/CORPORATE_ACTION_REVIEW_REQUIRED/);
+  // The whole history+audit operation must be coalesced; a slow audit cannot
+  // leave a resolved in-flight promise spinning in a microtask recursion.
+  let finishAudit,entered;const ready=new Promise(r=>entered=r);raw.memory.clear();raw.corporateAudit=async()=>{entered();await new Promise(r=>finishAudit=r);};const first=raw.history('TEST','D',250);await ready;const second=raw.history('TEST','D',250);finishAudit();raw.corporateAudit=async()=>{};await Promise.all([first,second]);
+  check('concurrent history waits for the complete corporate audit',()=>assert.equal(raw.inflight.size,0));
+  const daily=Array.from({length:250},(_,i)=>({time:Date.parse('2026-10-29T09:15:00+05:30')/1000-(249-i)*86400,open:100,high:103,low:97,close:100,volume:600000}));
+  const q={last_price:110,prev_close_price:100,volume:1800000,timestamp:now.toISOString()},value=S.metrics(manifest.stocks[0],q,daily);
+  check('fixed-candle metrics match independent closed-form expectations',()=>{assert.equal(value.avgVolume10d,600000);assert.equal(value.relVolume,3);assert.equal(value.sma50,100);assert.equal(value.sma200,100);assert.equal(value.perf3Month,0);assert(Math.abs(value.atrp-6/110*100)<1e-10);assert.equal(value.high52w,103);assert.equal(value.low52w,97);assert(S.eligible('intraday',value));assert(!S.eligible('intraday',{...value,relVolume:2}));assert(!S.eligible('early',{...value,atrp:1.5}));assert(!S.priceEligible('intraday',manifest.stocks[0],{last_price:102,prev_close_price:100}));assert(S.priceEligible('early',manifest.stocks[0],{last_price:100.5,prev_close_price:100}));assert(S.priceEligible('early',manifest.stocks[0],{last_price:103,prev_close_price:100}));});
+  const approved=process.env.UPSTOX_SCREENING_APPROVED,oldFile=process.env.UPSTOX_UNIVERSE_FILE;
+  try{
+   process.env.UPSTOX_SCREENING_APPROVED='true';process.env.UPSTOX_UNIVERSE_FILE=dir+'/screen-universe.json';
+   fs.writeFileSync(process.env.UPSTOX_UNIVERSE_FILE,JSON.stringify({source:'synthetic externally attested legacy manifest',asOf:now.toISOString(),adjustmentPolicy:'verified',stocks:['TEST','GOOD'].map(symbol=>({symbol,marketCap:1e10,sector:'Tech',eligible:true}))}));
+   const two=[instruments[0],{...instruments[0],trading_symbol:'GOOD',instrument_key:'NSE_EQ|INE000A01012',isin:'INE000A01012'}];
+   const real=new UpstoxProvider({token:'fixture',instruments:two,clock:()=>now,cacheDir:dir+'/quarantine',budget:{take:async()=>{}},transport:async config=>({data:{status:'success',data:config.url.includes('INE000A01011')?[{name:'Bonus',expiry_date:'29 Oct 2026'}]:[]}})});
+   real.loadHistory=async()=>daily.map((b,i)=>({...b,time:i===daily.length-1?Date.parse('2026-10-29T09:15:00+05:30')/1000:b.time}));real.quotes=async()=>({TEST:q,GOOD:q});const selected=await real.screen('intraday');assert.deepEqual(Object.keys(selected),['GOOD']);assert.equal(real.health.corporateExclusions.TEST.status,'excluded');
+   check('operational screening quarantines affected stock and retains healthy candidates',()=>assert.equal(selected.GOOD.relVolume,3));
+   const open=new Date('2026-10-30T03:45:02Z');let fetched=0;const nearOpen=new UpstoxProvider({token:'fixture',instruments,clock:()=>open,cacheDir:dir+'/near-open',budget:{take:async()=>{}},transport:async()=>{fetched++;return{data:{status:'success',data:{TEST:{instrument_token:instruments[0].instrument_key,last_price:110,prev_close_price:100,volume:1,timestamp:open.toISOString()}}}};}});
+   nearOpen.quoteCache={key:'TEST',at:open.getTime()-3000,value:{TEST:{...q,timestamp:'2026-10-29T09:59:00Z'}}};assert.equal((await nearOpen.quotes(['TEST'])).TEST.timestamp,open.toISOString());assert.equal(fetched,1);
+   check('a closed-session quote cache is revalidated at the next live open',()=>assert.equal(fetched,1));
+  }finally{if(approved===undefined)delete process.env.UPSTOX_SCREENING_APPROVED;else process.env.UPSTOX_SCREENING_APPROVED=approved;if(oldFile===undefined)delete process.env.UPSTOX_UNIVERSE_FILE;else process.env.UPSTOX_UNIVERSE_FILE=oldFile;}
+  const quotesProvider=new UpstoxProvider({token:'fixture',instruments:[...instruments,{...instruments[0],trading_symbol:'MISSING',instrument_key:'NSE_EQ|INE000A01012'}],clock:()=>now,cacheDir:dir+'/quotes',budget:{take:async()=>{}},transport:async()=>({data:{status:'success',data:{TEST:{...q,instrument_token:instruments[0].instrument_key}}}})});
+  assert.equal(Object.keys(await quotesProvider.quotes(['TEST','MISSING'],{allowUnavailable:true})).length,1);assert.equal(quotesProvider.health.quoteExclusions.MISSING.reason,'quote-missing');await assert.rejects(quotesProvider.quotes(['TEST','MISSING']),/STALE_OR_MISSING_QUOTE/);
+  check('discovery reports unavailable symbols without weakening strict index/quote reads',()=>assert.equal(quotesProvider.health.quoteExclusions.MISSING.reason,'quote-missing'));
+  const {exclusion}=require('./src/marketData/historyQuality');assert.equal(exclusion(Error('UPSTOX_DAILY_CANDLE_GAP')).reason,'UPSTOX_DAILY_CANDLE_GAP');assert.equal(exclusion(Error('UPSTOX_AUTH_REJECTED_ROTATE_TOKEN')),null);assert.equal(exclusion(Error('UPSTOX_REQUEST_FAILED')),null);
+  check('per-symbol data gaps can be quarantined; auth and network failures remain fatal',()=>assert.equal(exclusion(Error('Bearer private-fixture')),null));
+  const reference={asOf:now.toISOString(),stocks:{TEST:value}},report=compare(reference,reference);assert(assess(report).withinReviewTolerances);assert(!assess(compare(reference,{...reference,stocks:{TEST:{...value,price:200}}})).withinReviewTolerances);assert(!assess({...report,comparisons:[]}).withinReviewTolerances);
+  check('comparison tolerances reject changes and warn on low sample sizes',()=>assert(assess(report).lowSampleWarning));
+  const p={clock:()=>now,quotes:async()=>({TEST:q}),history:async()=>daily};const shadow=await shadowCompare(p,manifest,{fetchBaseline:async mode=>mode==='intraday'?{TEST:value}:{}});assert.equal(shadow.status,'review-required');assert.equal(shadow.approved,false);assert.equal(shadow.modes.intraday.matched,1);assert.equal(shadow.excluded.length,0);
+  p.history=async()=>{throw Object.assign(Error('UPSTOX_CORPORATE_ACTION_REVIEW_REQUIRED'),{audit:{status:'excluded',affected:[{type:'split',date}]}});};const blocked=await shadowCompare(p,manifest,{fetchBaseline:async()=>({})});assert.equal(blocked.excluded[0].symbol,'TEST');assert.equal(blocked.modes.intraday.matched,0);
+  check('shadow mode reports exclusions and never self-approves migration',()=>{assert.equal(blocked.approved,false);assert.throws(()=>mapTv([{s:'NSE:TEST',d:[]}]),/BASELINE_INVALID/);assert.deepEqual(mapTv([{s:'BSE:TEST',d:[]}]),{});});
+  const service=require('./src/services/upstoxPreparation'),saved=[],store={status:()=>({connected:true}),saveState:async(key,data)=>saved.push(JSON.parse(JSON.stringify(data))),flush:async()=>{}};
+  const serviceEnv={INGEST_MODE:'true',UPSTOX_ACCESS_TOKEN:'private-fixture'},persisted=[];let release;const pending=new Promise(r=>release=r);
+  const jobProvider={persist:async(k,v)=>persisted.push([k,v]),read:async()=>null};
+  const opts={provider:jobProvider,store,env:serviceEnv,prepare:async()=>{await pending;return manifest;},compare:async()=>shadow,acquire:async()=>({stop:async()=>{}})};
+  assert.equal(service.start(opts).started,true);assert.equal(service.start(opts).started,false);release();await new Promise(r=>setImmediate(r));assert.equal((await service.status()).state,'review-required');assert.equal(persisted[0][0],'launch-comparison');
+  service.start({...opts,prepare:async()=>{throw Error('Bearer private-fixture');}});await new Promise(r=>setImmediate(r));assert.equal((await service.status()).state,'failed');assert(!JSON.stringify(await service.status()).includes('private-fixture'));assert(saved.length>0);
+  check('background job deduplicates, persists reports and suppresses secret errors',()=>assert.equal(service.errorCode(Error('Bearer private-fixture')),'OPERATION_FAILED'));
+  console.log(`Upstox preparation: ${checks} grouped checks passed; no authenticated live APIs were called.`);
+ }finally{fs.rmSync(dir,{recursive:true,force:true});await require('./src/services/tvHistory').closeClient();}
+})().catch(e=>{console.error(e);process.exitCode=1;});

@@ -24,15 +24,15 @@ function normalize(rows) {
 }
 function chunks(from,to,days=28){const result=[];let cursor=from;while(cursor<=to){const end=new Date(Math.min(Date.parse(`${to}T00:00:00Z`),Date.parse(`${cursor}T00:00:00Z`)+(days-1)*86400000)).toISOString().slice(0,10);result.push([cursor,end]);cursor=new Date(Date.parse(`${end}T00:00:00Z`)+86400000).toISOString().slice(0,10);}return result;}
 class UpstoxProvider {
- constructor({token=process.env.UPSTOX_ACCESS_TOKEN,transport=axios,clock=()=>new Date(),sleep=delay,budget=new RequestBudget(),cacheDir=process.env.SWING_DATA_DIR||path.join(__dirname,'../../data'),instruments=null}={}){
+ constructor({token=process.env.UPSTOX_ACCESS_TOKEN,transport=axios,clock=()=>new Date(),sleep=delay,budget=new RequestBudget(),cacheDir=process.env.SWING_DATA_DIR||path.join(__dirname,'../../data'),instruments=null,corporateAudit=require('./corporateActions').auditHistory}={}){
   const publicationDelay=Number(process.env.UPSTOX_FINALIZATION_DELAY_MS||10000);
   if(!Number.isSafeInteger(publicationDelay)||publicationDelay<0||publicationDelay>600000)throw new Error('UPSTOX_INVALID_FINALIZATION_DELAY');
-  this.publicationDelay=publicationDelay;
+  this.publicationDelay=publicationDelay;this.corporateAudit=corporateAudit;
   this.token=token;this.transport=transport;this.clock=clock;this.sleep=sleep;this.budget=budget;this.cacheDir=path.join(cacheDir,'upstox');this.instruments=instruments;this.masterAt=instruments?clock().getTime():0;this.inflight=new Map();this.memory=new Map();this.quoteCache=null;this.masterPending=null;this.blocked=false;this.health={provider:'upstox',status:'unverified',lastSuccess:null,lastError:null};
  }
  async request(route,params={}){
   if(!this.token)throw new Error('UPSTOX_TOKEN_MISSING');if(this.blocked)throw new Error('UPSTOX_AUTH_REJECTED_ROTATE_TOKEN');
-  for(let attempt=0;attempt<3;attempt++){await this.budget.take();try{const response=await this.transport({method:'GET',url:'https://api.upstox.com'+route,params,headers:{Authorization:`Bearer ${this.token}`,Accept:'application/json'},timeout:12000});if(response.data?.status!=='success')throw new Error('UPSTOX_INVALID_RESPONSE');this.health={provider:'upstox',status:'available',lastSuccess:this.clock().toISOString(),lastError:null};return response.data.data;
+  for(let attempt=0;attempt<3;attempt++){await this.budget.take();try{const response=await this.transport({method:'GET',url:'https://api.upstox.com'+route,params,headers:{Authorization:`Bearer ${this.token}`,Accept:'application/json'},timeout:12000});if(response.data?.status!=='success')throw new Error('UPSTOX_INVALID_RESPONSE');this.health={...this.health,provider:'upstox',status:'available',lastSuccess:this.clock().toISOString(),lastError:null};return response.data.data;
    }catch(error){const status=error.response?.status;this.health.status='unavailable';this.health.lastError=status?`HTTP_${status}`:'NETWORK_OR_INVALID_RESPONSE';if(status===401||status===403){this.blocked=true;throw new Error('UPSTOX_AUTH_REJECTED_ROTATE_TOKEN');}if(status&&status!==429&&status<500)throw new Error(`UPSTOX_HTTP_${status}`);if(attempt===2)throw new Error('UPSTOX_REQUEST_FAILED');const header=error.response?.headers?.['retry-after'];let ms=Number(header)*1000;if(!Number.isFinite(ms)&&header)ms=Date.parse(header)-Date.now();await this.sleep(Math.max(Number.isFinite(ms)?ms:0,500*2**attempt+Math.floor(Math.random()*200)));}
   }
  }
@@ -55,10 +55,10 @@ class UpstoxProvider {
  async history(symbol,interval,nBars){if(!['5','D'].includes(interval)||!Number.isInteger(nBars)||nBars<1||nBars>10000)throw new Error('UPSTOX_UNSUPPORTED_HISTORY_REQUEST');const item=await this.instrument(symbol),key=`${item.instrument_key}:${interval}`;
   // Coalesce by instrument/timeframe; grow a smaller in-flight request if needed.
   if(this.inflight.has(key)){await this.inflight.get(key);return this.history(symbol,interval,nBars);}
-  const operation=this.loadHistory(item,interval,nBars,key);this.inflight.set(key,operation);try{return await operation;}finally{this.inflight.delete(key);}
+  const operation=(async()=>{const bars=await this.loadHistory(item,interval,nBars,key);await this.corporateAudit(this,item,bars);return bars;})();this.inflight.set(key,operation);try{return await operation;}finally{this.inflight.delete(key);}
  }
  async loadHistory(item,interval,nBars,key){const now=this.clock(),today=nowIST(now).dateKey,previous=dayBefore(today),daily=interval==='D',unit=daily?'days':'minutes',count=daily?1:5;
-  const old=await this.read(key);if(old&&old.bars.length>=nBars&&now.getTime()-old.fetchedAt<15000){try{assertFresh(old.bars,interval,now,this.publicationDelay);return old.bars.slice(-nBars).map(b=>({...b}));}catch(_){/* A new bar can close inside the TTL: refresh instead of returning stale data. */}}
+  const old=await this.read(key);if(old&&(old.bars.length>=nBars||old.requestedBars>=nBars)&&now.getTime()-old.fetchedAt<(daily?6*3600000:15000)){try{assertFresh(old.bars,interval,now,this.publicationDelay);return old.bars.slice(-nBars).map(b=>({...b}));}catch(_){/* A new bar can close inside the TTL: refresh instead of returning stale data. */}}
   const days=daily?Math.ceil(nBars*1.7+30):Math.ceil(nBars/75*1.7+7);const wanted=new Date(now.getTime()-days*86400000).toISOString().slice(0,10);
   let from=old?.bars.length>=nBars?nowIST(new Date(old.bars.at(-1).time*1000)).dateKey:wanted;
   from=from<(daily?'2000-01-01':'2022-01-01')?(daily?'2000-01-01':'2022-01-01'):from;
@@ -72,26 +72,50 @@ class UpstoxProvider {
   if(daily){for(let i=1;i<bars.length;i++){const a=nowIST(new Date(bars[i-1].time*1000)).dateKey,b=nowIST(new Date(bars[i].time*1000)).dateKey;const expected=nextTradingDay(a);if(expected!==b)throw Object.assign(new Error('UPSTOX_DAILY_CANDLE_GAP'),{previousSession:a,expectedSession:expected,actualSession:b});}}
 
   assertFresh(bars,interval,now,this.publicationDelay);
-  await this.persist(key,{provider:'upstox',adjustmentPolicy:'unverified-provider-native',fetchedAt:now.getTime(),bars:bars.slice(-10000)});return bars.slice(-nBars).map(b=>({...b}));
+  await this.persist(key,{provider:'upstox',adjustmentPolicy:'unverified-provider-native',fetchedAt:now.getTime(),requestedBars:nBars,bars:bars.slice(-10000)});return bars.slice(-nBars).map(b=>({...b}));
  }
- async quotes(symbols){const now=this.clock().getTime();const cacheKey=[...symbols].sort().join(',');if(this.quoteCache?.key===cacheKey&&now-this.quoteCache.at<10000)return this.quoteCache.value;const records=await Promise.all(symbols.map(s=>this.instrument(s)));const result={};for(let offset=0;offset<records.length;offset+=500){const batch=records.slice(offset,offset+500);const data=await this.request('/v3/market-quote/quotes',{instrument_key:batch.map(r=>r.instrument_key).join(',')});for(const row of batch){const quote=Object.values(data).find(q=>q.instrument_token===row.instrument_key);if(!quote||!Number.isFinite(quote.last_price)||quote.last_price<=0||!Number.isFinite(Date.parse(quote.timestamp))||Math.abs(now-Date.parse(quote.timestamp))>60000)throw new Error('UPSTOX_STALE_OR_MISSING_QUOTE');result[row.trading_symbol||'NIFTY']=quote;}}this.quoteCache={key:cacheKey,at:now,value:result};return result;}
+ async quotes(symbols,{allowUnavailable=false,force=false}={}){
+  const now=this.clock().getTime(),cacheKey=(allowUnavailable?'discovery:':'')+[...symbols].sort().join(',');
+  if(!force&&this.quoteCache?.key===cacheKey&&now-this.quoteCache.at<10000&&Object.values(this.quoteCache.value).every(q=>require('./quoteFreshness').quoteIsFresh(q,this.clock())))return this.quoteCache.value;
+  const records=await Promise.all(symbols.map(s=>this.instrument(s))),result={},unavailable={};
+  for(let offset=0;offset<records.length;offset+=500){
+   const batch=records.slice(offset,offset+500),data=await this.request('/v3/market-quote/quotes',{instrument_key:batch.map(r=>r.instrument_key).join(',')});
+   for(const row of batch){const name=row.trading_symbol||'NIFTY',quote=Object.values(data).find(q=>q.instrument_token===row.instrument_key);
+    if(!quote||!Number.isFinite(quote.last_price)||quote.last_price<=0||!Number.isFinite(Date.parse(quote.timestamp))||!require('./quoteFreshness').quoteIsFresh(quote,this.clock())){
+     if(!allowUnavailable)throw new Error('UPSTOX_STALE_OR_MISSING_QUOTE');unavailable[name]={reason:quote?'invalid-or-stale-quote':'quote-missing'};continue;
+    }
+    if(allowUnavailable&&(!Number.isFinite(quote.prev_close_price)||quote.prev_close_price<=0||!Number.isFinite(quote.volume)||quote.volume<0)){unavailable[name]={reason:'missing-discovery-fields'};continue;}
+    result[name]=quote;
+   }
+  }
+  if(!Object.keys(result).length)throw new Error('UPSTOX_STALE_OR_MISSING_QUOTE');
+  if(allowUnavailable)this.health.quoteExclusions=unavailable;
+  this.quoteCache={key:cacheKey,at:now,value:result};return result;
+ }
+
  async niftyChange(){const q=Object.values(await this.quotes(['NIFTY']))[0];if(!(q.prev_close_price>0))throw new Error('UPSTOX_INDEX_PREVIOUS_CLOSE_MISSING');return (q.last_price/q.prev_close_price-1)*100;}
  async screen(mode){
+  if(!['intraday','early','swing'].includes(mode))throw Error('UPSTOX_SCREEN_MODE_INVALID');
   if(process.env.UPSTOX_SCREENING_APPROVED!=='true')throw new Error('UPSTOX_SCREENING_PARITY_APPROVAL_REQUIRED');
-  const file=process.env.UPSTOX_UNIVERSE_FILE;if(!file)throw new Error('UPSTOX_UNIVERSE_FILE_REQUIRED');let manifest;try{manifest=JSON.parse(fs.readFileSync(file,'utf8'));}catch(_){throw new Error('UPSTOX_UNIVERSE_INVALID');}
-  if(!manifest.source||manifest.adjustmentPolicy!=='verified'||!Array.isArray(manifest.stocks)||!Number.isFinite(Date.parse(manifest.asOf))||(this.clock().getTime()-Date.parse(manifest.asOf)>7*86400000 || Date.parse(manifest.asOf)>this.clock().getTime()))throw new Error('UPSTOX_UNIVERSE_METADATA_STALE_OR_UNVERIFIED');
-  const rows=manifest.stocks;if(rows.length>5000||rows.some(r=>! /^[A-Z0-9.&_-]{1,24}$/.test(r.symbol)||!Number.isFinite(r.marketCap)||r.marketCap<=0||typeof r.sector!=='string'||r.eligible!==true))throw new Error('UPSTOX_UNIVERSE_METADATA_INVALID');
-  const quotes=await this.quotes(rows.map(r=>r.symbol)),candidates=[];
-  for(const row of rows){const q=quotes[row.symbol],price=q.last_price,change=(price/q.prev_close_price-1)*100;if(!(q.prev_close_price>0))continue;if(mode==='swing'?(price<S.SWING_MIN_PRICE||price>S.SWING_MAX_PRICE||change>=5||row.marketCap<=S.SWING_MIN_MARKET_CAP):(price<100||price>3000||(mode==='early'?(change<.5||change>3):change<=2)))continue;
-   const bars=await this.history(row.symbol,'D',250);if(bars.length<200||bars.slice(-10).some(b=>!Number.isFinite(b.volume)))continue;
-   const average=bars.slice(-10).reduce((s,b)=>s+b.volume,0)/10,relVolume=average>0?q.volume/average:0,atrp=atr(bars,14).at(-1)/price*100;
-   const sma=n=>bars.slice(-n).reduce((s,b)=>s+b.close,0)/n;
-   if(mode==='swing'?(average<=S.SWING_MIN_AVG_VOLUME||atrp<=S.SWING_MIN_ATRP||price<=sma(200)||sma(50)<=sma(200)):(average<=500000||atrp<=(mode==='early'?1.5:2)||relVolume<=(mode==='early'?1.2:2)))continue;
-   candidates.push([row.symbol,{price,change,relVolume,sector:row.sector,marketCap:row.marketCap,volume:q.volume,atrp,avgVolume10d:average,perfWeek:(bars.at(-1).close/bars.at(-6).close-1)*100,perfMonth:(bars.at(-1).close/bars.at(-22).close-1)*100,perf3Month:(bars.at(-1).close/bars.at(-64).close-1)*100,high52w:Math.max(...bars.map(b=>b.high)),low52w:Math.min(...bars.map(b=>b.low)),sma50:sma(50),sma200:sma(200),source:'upstox'}]);
+  const manifest=await require('./universe').loadManifest(this,{refresh:true});
+  await require('./universe').assertPrepared(this,manifest);
+  const {priceEligible,metrics,eligible}=require('./screening');
+  const rows=manifest.stocks,quotes=await this.quotes(rows.map(r=>r.symbol),{allowUnavailable:true}),prepared=[];
+  for(const row of rows){
+   if(!priceEligible(mode,row,quotes[row.symbol]))continue;
+   try{prepared.push({row,bars:await this.history(row.symbol,'D',250)});if(this.health.historyExclusions)delete this.health.historyExclusions[row.symbol];}
+   catch(error){if(error.message==='UPSTOX_CORPORATE_ACTION_REVIEW_REQUIRED')continue;const excluded=require('./historyQuality').exclusion(error);if(excluded){this.health.historyExclusions||={};this.health.historyExclusions[row.symbol]=excluded;continue;}throw error;}
   }
-  for(const [symbol] of candidates)if(this.clock().getTime()-Date.parse(quotes[symbol].timestamp)>60000)throw new Error('UPSTOX_SCAN_QUOTES_EXPIRED_DURING_ANALYSIS');
-  candidates.sort((a,b)=>mode==='swing'?b[1].perf3Month-a[1].perf3Month:b[1].relVolume-a[1].relVolume);return Object.fromEntries(candidates.slice(0,mode==='swing'?S.SWING_SCAN_LIMIT:100));
+  // Cold preparation can take minutes. Expired quote caches are refreshed
+  // before final gates; only current live or last-session snapshots qualify.
+  const fresh=await this.quotes(rows.map(r=>r.symbol),{allowUnavailable:true}),candidates=[];
+  for(const {row,bars}of prepared){assertFresh(bars,'D',this.clock(),this.publicationDelay);const q=fresh[row.symbol];if(!priceEligible(mode,row,q))continue;const value=metrics(row,q,bars);if(eligible(mode,value))candidates.push([row.symbol,value]);}
+  for(const [symbol]of candidates)if(!require('./quoteFreshness').quoteIsFresh(fresh[symbol],this.clock()))throw new Error('UPSTOX_SCAN_QUOTES_EXPIRED_DURING_ANALYSIS');
+  candidates.sort((a,b)=>(mode==='swing'?b[1].perf3Month-a[1].perf3Month:b[1].relVolume-a[1].relVolume)||a[0].localeCompare(b[0]));
+  this.health.lastScreen={mode,at:this.clock().toISOString(),universe:rows.length,prepared:prepared.length,excluded:Object.keys(this.health.corporateExclusions||{}).length,historyExcluded:Object.keys(this.health.historyExclusions||{}).length,quoteExcluded:Object.keys(this.health.quoteExclusions||{}).length};
+  return Object.fromEntries(candidates.slice(0,mode==='swing'?S.SWING_SCAN_LIMIT:100));
  }
+
 }
 let singleton;
 function getProvider(){if(!singleton)singleton=new UpstoxProvider();return singleton;}

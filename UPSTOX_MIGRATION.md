@@ -1,6 +1,11 @@
-# Upstox migration — implementation and launch gates
+# Upstox migration — current implementation status
 
-Branch: `phase8-upstox`, preserving earlier uncommitted phase work. No deployment or production setting has been changed. TradingView remains the default until an explicit verified configuration cutover.
+The current setup guide is [UPSTOX_DATA_SETUP.md](UPSTOX_DATA_SETUP.md). It supersedes
+the earlier manual-universe limitations below where explicitly updated. Code is
+on `master`; provider cutover remains an explicit deployment setting.
+
+
+Current deployment branch: `master`; original migration development was on `phase8-upstox`. TradingView remains the code default; previous commits have been deployed by the owner. Live quote/candle samples for RELIANCE and NIFTY succeeded on Render in the owner-provided 30 October 2026 logs. This does not verify Fundamentals, full-universe screening or streaming.
 
 ## Implemented
 
@@ -60,8 +65,8 @@ All market-cap values are INR. The file must be available on the scanner host an
 | ATRP | Wilder ATR14 / current quote price × 100 | Validate vendor smoothing/denominator differences |
 | SMA50/200 | Completed daily closes | Compare to screener's current-day inclusion |
 | Three-month performance | Last completed close / close 63 bars earlier − 1 | Fixed-session approximation requires approval |
-| Market cap/sector/eligibility | Required sourced manifest | Automated verified metadata ingestion is not implemented |
-| Corporate actions | Provider-native values, explicitly unverified | Validate adjustment policy before approval |
+| Market cap/sector/eligibility | Required sourced manifest | Automated NSE MCAP + Upstox profile preparation now exists; real coverage must pass in the admin workflow |
+| Corporate actions | Provider-native values with structural-action quarantine | Review live exclusions; dividend/total-return equivalence is not assumed |
 | Universe | Manifest-listed NSE equities mapped to master | Historical membership and full-market parity not proven |
 
 The supplied live quote schema and instrument master do not establish a complete field-parity solution by themselves. Never remove missing filters silently. Private 10–20-user display/alert permissions and account entitlements still need confirmation with the provider.
@@ -70,7 +75,7 @@ The supplied live quote schema and instrument master do not establish a complete
 
 A warm 150-symbol one-candle-request-per-five-minutes design uses about 900 requests per 30 minutes before extra workloads. Cold universe screening can require hundreds/thousands of daily history requests; the limiter deliberately waits, so cold startup may take much longer than one normal scan cycle. Chart, outcome, backfill and reminder jobs share this process's budget, but do not yet have priority/fairness scheduling. Persistent state snapshots can grow to 10,000 bars per instrument/interval; normalized candle-table pagination, retention, cross-process cache sharing and large-universe load qualification remain unfinished.
 
-The instrument master refreshes daily and persists a shared snapshot; automatic fundamental enrichment remains unfinished. Live discovery is quote-filtered before daily technical requests, but exact full-universe equivalence to TradingView is not certified. Five-minute signal functions are still called by the existing tick loop, with cached completed bars; a separate once-per-new-bar evaluation scheduler has not been implemented.
+The instrument master refreshes daily and persists a shared snapshot; NSE MCAP + Upstox sector enrichment is now implemented with strict full-coverage validation; see UPSTOX_DATA_SETUP.md. Live discovery is quote-filtered before daily technical requests, but exact full-universe equivalence to TradingView is not certified. Five-minute signal functions are still called by the existing tick loop, with cached completed bars; a separate once-per-new-bar evaluation scheduler has not been implemented.
 
 The durable outbox is backed by the scanner's persistent local data directory with an asynchronous database mirror. Ephemeral local storage plus an unflushed database write can still lose the newest records. This is not a transactional database outbox. Concurrent ingest arrivals are not transactionally serialized with journal append/broadcast; database uniqueness protects persisted events but exactly-once local/SSE effects under concurrent races are not guaranteed.
 
@@ -124,3 +129,18 @@ keyed by symbol. Reports expose added/removed symbols, sector mismatches, numeri
 differences and missing fields; no tolerance or parity approval is fabricated.
 The authoritative current status is the latest readiness report and test results,
 not the earlier proposal's target-state diagram.
+
+## Universe and corporate-action completion update
+
+The admin data-setup workflow now builds a source-dated manifest, performs
+read-only three-mode screener comparisons and records structural-action exclusions.
+The owner selected exclusion until adjustment verification, rather than guessed
+back-adjustment. All equity history consumers use the default corporate audit,
+including caches. Generated manifests require their comparison report before
+scanning, and environment approval remains an explicit owner action. See
+UPSTOX_DATA_SETUP.md for exact source formats, differences, tests and Render steps.
+
+The hand-authored `adjustmentPolicy: verified` example above is retained only as a
+legacy external-attestation format for backward compatibility. Generated v2
+manifests use `provider-native-audited`; the code does not claim vendor-adjusted
+price/volume equivalence or automatically certify historical corporate actions.

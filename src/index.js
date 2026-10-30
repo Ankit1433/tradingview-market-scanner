@@ -82,7 +82,8 @@ async function initializeStorageAndLoops() {
   startupStage='provider_setup';
   if (market.name === 'upstox') {
     if (!process.env.UPSTOX_ACCESS_TOKEN) throw new Error('UPSTOX_TOKEN_MISSING');
-    if ((ENABLE_INTRADAY || ENABLE_SWING) && (process.env.UPSTOX_SCREENING_APPROVED !== 'true' || !process.env.UPSTOX_UNIVERSE_FILE)) throw new Error('UPSTOX_SCREENING_PARITY_APPROVAL_AND_METADATA_REQUIRED');
+    if ((ENABLE_INTRADAY || ENABLE_SWING) && process.env.UPSTOX_SCREENING_APPROVED !== 'true') throw new Error('UPSTOX_SCREENING_PARITY_APPROVAL_AND_METADATA_REQUIRED');
+    if (ENABLE_INTRADAY || ENABLE_SWING) {const universe=require('./marketData/universe');await universe.assertPrepared(market.provider(),await universe.loadManifest(market.provider(),{refresh:true}));}
     if (ENABLE_INTRADAY || ENABLE_SWING) {
       if (!supabaseStore.status().connected) throw new Error('UPSTOX_WORKERS_REQUIRE_DATABASE_LEASE');
 
@@ -143,6 +144,7 @@ async function shutdown() {
   stop();
   _stop();
   await personalLoop.stop();
+  await require('./services/upstoxPreparation').stop();
   await outcomeLoop.stop();
   // Best-effort flush of anything still queued for the remote API.
   await drain().catch(() => {});

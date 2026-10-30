@@ -8,9 +8,10 @@ function add(name,passed,action){checks.push({name,passed:Boolean(passed),...(pa
  add('private_access_enabled',process.env.PRIVATE_MODE!=='false','Enable PRIVATE_MODE for invite-only hosting');
  add('database_configuration',process.env.SUPABASE_URL&&(process.env.SUPABASE_SECRET_KEY||process.env.SUPABASE_SERVICE_ROLE_KEY),'Configure backend Supabase URL and secret');
  add('origin_configuration',process.env.APP_ORIGIN,'Set APP_ORIGIN to your browser origin');
- const calendar=require('../src/config/nseCalendar')[Number(nowIST().dateKey.slice(0,4))];add('calendar_verified',calendar?.verified,'Verify and update official NSE equity holidays/special sessions');
- let manifest;try{manifest=JSON.parse(fs.readFileSync(process.env.UPSTOX_UNIVERSE_FILE,'utf8'));}catch(_){}
- add('sourced_universe',manifest?.source&&manifest?.stocks?.length&&manifest.adjustmentPolicy==='verified','Provide a sourced, verified universe manifest');
+ const calendar=require('../src/services/tradingCalendar').calendarInfo(nowIST().dateKey);add('calendar_verified',calendar.config?.verified&&!calendar.stale,'Verify official NSE equity holidays and special sessions through the launch date');
+ let manifest,comparison;try{const p=require('../src/marketData/upstox').getProvider();manifest=await require('../src/marketData/universe').loadManifest(p);await require('../src/marketData/universe').assertPrepared(p,manifest);comparison=await p.read('launch-comparison');}catch(_){}
+ add('sourced_universe',Boolean(manifest),'Prepare the universe from the admin panel; inspect missing source/coverage errors');
+ add('comparison_recorded',manifest?.version===2?comparison?.universeKey===manifest.universeKey:Boolean(manifest),'Run the admin shadow comparison for the selected NSE universe and review differences');
  add('parity_approval_recorded',process.env.UPSTOX_SCREENING_APPROVED==='true','Compare screening definitions and explicitly approve differences');
  add('data_use_confirmation_recorded',process.env.UPSTOX_DATA_USE_CONFIRMED==='true','Confirm intended private multi-user data use with Upstox before recording confirmation');
  if(process.argv.includes('--live')){
