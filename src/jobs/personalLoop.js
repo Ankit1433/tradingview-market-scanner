@@ -9,7 +9,7 @@ const db=require('../services/supabaseStore');
 const {createDelivery}=require('../services/chatDelivery');
 let alerts, sharedDelivery, botLease;
 const {isTradingDay}=require('../services/tradingCalendar');
-let offset=0,timer,running=false,active;
+let offset=0,timer,running=false,active,startController;
 let deliveryAfter=0;
 const bot=process.env.TELEGRAM_BOT_TOKEN;
 async function telegram(method,data){if(!bot)return null;return (await axios.post(`https://api.telegram.org/bot${bot}/${method}`,data,{timeout:10000})).data;}
@@ -44,8 +44,10 @@ async function evaluateOpen({accounts=store,history=getHist,now=new Date()}={}){
  }
 }
 async function start(){if(running)return;if(!db.status().connected)throw new Error('PERSONAL_ALERT_WORKER_REQUIRES_DATABASE');
- botLease=await require('../marketData/ownership').acquire({key:'ankquant-telegram-worker',onLost:()=>{running=false;clearTimeout(timer);console.error('[alerts] Telegram ownership lost; worker stopped');}});
+ startController=new AbortController();
+ botLease=await require('../marketData/ownership').acquire({key:'ankquant-telegram-worker',waitMs:150000,signal:startController.signal,onWaiting:()=>console.log('[alerts] Waiting for previous Telegram worker lease; no polling or delivery until acquired'),onLost:()=>{running=false;clearTimeout(timer);console.error('[alerts] Telegram ownership lost; worker stopped');}});
  try{offset=(await db.loadState('telegram-update-offset'))?.payload?.offset||0;}catch(error){await botLease.stop();throw error;}
+ if(startController.signal.aborted){await botLease.stop();throw Object.assign(new Error('WORKER_ACQUISITION_CANCELLED'),{code:'WORKER_ACQUISITION_CANCELLED'});}
  running=true;sharedDelivery=createDelivery({accounts:store,send:telegram,canSend:()=>running});alerts=require('./alertLoop').createAlerts({accounts:store,db,deliver:sharedDelivery});
  let lastEvaluation=0;const warnings=new Map();
  function report(error,stage){const failure=require('../operations/failureDetails').details(error,stage),key=JSON.stringify(failure),last=warnings.get(stage);if(last?.key!==key||Date.now()-last.at>=60000){console.warn('[alerts] '+key);warnings.set(stage,{key,at:Date.now()});}}
@@ -57,6 +59,6 @@ async function start(){if(running)return;if(!db.status().connected)throw new Err
   try{if(await active)warnings.clear();}finally{active=null;if(running){timer=setTimeout(tick,5000);timer.unref?.();}}
  }tick();}
 
-async function stop(){running=false;clearTimeout(timer);if(active)await active.catch(()=>{});await botLease?.stop();}
+async function stop(){running=false;startController?.abort();clearTimeout(timer);if(active)await active.catch(()=>{});await botLease?.stop();}
 
 module.exports={start,stop,linkMessage,evaluateOpen,deliver};

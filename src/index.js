@@ -60,6 +60,7 @@ const server = app.listen(PORT, () => {
   }
 });
 
+let startupStage='storage';
 async function initializeStorageAndLoops() {
   if (await supabaseStore.connect()) {
     await Promise.all([
@@ -69,13 +70,16 @@ async function initializeStorageAndLoops() {
     await paperTradeStore.hydrateIntradayPositions();
   }
 
+  startupStage='bootstrap_admin';
   await require('./services/bootstrapAdmin').onStartup();
   // Diagnostic runs independently and cannot enable scanners or block readiness.
   require('./services/upstoxStartupCheck').runCheck().catch(()=>{
     console.warn('[upstox-check] UPSTOX_CONNECTIVITY_CHECK_FAILED');
   });
 
+  startupStage='scanner_ownership';
   if (ENABLE_INTRADAY || ENABLE_SWING) marketLease = await require('./services/scannerOwnership').ensure({onLost:()=>{process.exitCode=1;shutdown();}});
+  startupStage='provider_setup';
   if (market.name === 'upstox') {
     if (!process.env.UPSTOX_ACCESS_TOKEN) throw new Error('UPSTOX_TOKEN_MISSING');
     if ((ENABLE_INTRADAY || ENABLE_SWING) && (process.env.UPSTOX_SCREENING_APPROVED !== 'true' || !process.env.UPSTOX_UNIVERSE_FILE)) throw new Error('UPSTOX_SCREENING_PARITY_APPROVAL_AND_METADATA_REQUIRED');
@@ -93,9 +97,11 @@ async function initializeStorageAndLoops() {
       }
     }
   }
+  startupStage='outcome_storage';
   await outcomeStore.hydrate();
   if (!INGEST_MODE && process.env.ENABLE_OUTCOMES !== 'false' && (ENABLE_INTRADAY || ENABLE_SWING)) outcomeLoop.start();
 
+  startupStage='scanner_start';
   if (ENABLE_INTRADAY) {
     start().catch((e) => {
       console.error('Failed to start intraday scan loop:', e);
@@ -114,12 +120,15 @@ async function initializeStorageAndLoops() {
     console.log('Swing loop disabled (ENABLE_SWING=false)');
   }
 
+  startupStage='outbox_start';
   if (!INGEST_MODE) { await require('./services/pushClient').hydrateOutbox(); __start(); }
+  startupStage='telegram_worker';
   if (process.env.PRIVATE_MODE !== 'false' && process.env.ENABLE_PERSONAL_WORKER === 'true') await personalLoop.start();
 }
 
 initializeStorageAndLoops().catch((e) => {
-  require('./operations/log').log('error','startup_failed',{error:e});
+  if(shuttingDown)return;
+  require('./operations/log').log('error','startup_failed',{...require('./operations/failureDetails').details(e,startupStage),error:e});
   process.exitCode=1;shutdown();
 });
 

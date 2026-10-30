@@ -390,3 +390,15 @@ and queued delivery are still attempted with their normal per-chat throttles.
 This does not repair the host-to-Telegram network: send requests may also fail.
 There is no automatic token rotation or endpoint/proxy substitution. A linked
 account proves an earlier link was consumed, not current transport connectivity.
+
+## Telegram worker handoff during redeploy
+
+A new instance waits up to 150 seconds for an existing Telegram worker's database
+lease (120-second expiry), retrying every five seconds. The HTTP app stays available
+while it waits; no new bot polling or delivery starts without ownership. It never
+deletes another owner's lease. Shutdown cancels pending acquisition. If another
+worker remains active throughout the timeout, startup fails with
+`MARKET_WORKER_ALREADY_OWNED`; check for duplicate deployments/hosts rather than
+deleting active lease rows. Database failures remain fatal and now log the startup
+stage and sanitized resource / HTTP status. No migration or environment change
+is required for this code fix. This does not resolve Telegram network timeouts.
