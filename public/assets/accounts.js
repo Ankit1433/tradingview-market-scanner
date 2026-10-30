@@ -19,7 +19,15 @@
   $('upstox-panel').hidden=me.role!=='admin';
   if(me.role==='admin'){
    const renderSetup=data=>{$('upstox-status').textContent=`${data.state} · ${data.phase||'not started'}${data.code?' · '+data.code:''}. Scanning stays controlled by Render settings.`;$('upstox-report').textContent=JSON.stringify(data,null,2);};
-   $('upstox-report-form').addEventListener('submit',protect(async event=>{const form=event.currentTarget,file=form.elements.reportFile.files[0];if(!file||file.size>12*1024*1024)throw Error('Choose an original NSE PR ZIP no larger than 12 MB');const response=await fetch('/api/account/admin/upstox/report',{method:'POST',headers:{'content-type':'application/zip','x-report-date':form.elements.reportDate.value,'x-nse-source-attested':String(form.elements.attested.checked)},body:file});let data;try{data=await response.json();}catch(_){throw Error('Report import failed');}if(!response.ok)throw Error(data.error||'Report import failed');status.textContent='NSE report imported. Start preparation to fetch sectors and compare screeners.';}));
+   $('upstox-report-form').addEventListener('submit',protect(async event=>{
+    const form=event.currentTarget,file=form.elements.reportFile.files[0],message=$('upstox-import-status');message.textContent='Importing NSE report…';
+    try{
+     if(!file||file.size>12*1024*1024)throw Error('Choose an original NSE PR ZIP no larger than 12 MB');
+     const response=await fetch('/api/account/admin/upstox/report',{method:'POST',headers:{'content-type':'application/zip','x-report-date':form.elements.reportDate.value,'x-nse-source-attested':String(form.elements.attested.checked)},body:file});
+     let data;try{data=await response.json();}catch(_){throw Error('Report import failed');}if(!response.ok)throw Error(data.error||'Report import failed');
+     message.textContent='NSE report imported. Click Prepare universe and compare.';status.textContent=message.textContent;$('upstox-status').textContent=message.textContent;
+    }catch(error){message.textContent=error.message;throw error;}
+   }));
    $('prepare-upstox').addEventListener('click',protect(async()=>{await api('/admin/upstox/prepare',{});renderSetup(await api('/admin/upstox'));}));
    $('refresh-upstox').addEventListener('click',protect(async()=>renderSetup(await api('/admin/upstox'))));
   }

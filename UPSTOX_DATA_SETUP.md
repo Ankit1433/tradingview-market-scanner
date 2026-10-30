@@ -180,3 +180,25 @@ strict thresholds, closed-session quote freshness, read-only comparisons,
 background-job dedupe/error sanitization, admin/friend/anonymous authorization,
 same-origin writes, binary imports and desktop/mobile UI. They do not certify
 live NSE downloads, full Fundamentals coverage, performance or screening parity.
+
+## NSE report close precision correction
+
+The owner's original 29 October 2026 PR archive contains 2,366 EQ rows. Fifteen
+failed the original relative-only cap check: for example FILATFASH displays
+0.15 while cap / issue size implies 0.17. The largest observed absolute implied
+price difference across that report is approximately 0.02 INR. Import validation
+now accepts either the original 1% relation or an absolute difference of at most
+0.025 INR (plus numerical epsilon), with an implied/displayed price ratio bound
+of 0.5–1.5. This is a bounded compatibility rule for the observed display precision,
+not a claim that every NSE report always uses the same rounding policy. Large
+unit mismatches still fail. Reported company caps are retained verbatim; no prices
+or capitalisations are repaired. A three-row real-data regression fixture is
+included; the full uploaded archive is not committed. Import success/failure
+is now displayed next to the import button as well as the page-level status.
+
+A recent imported report is also considered during initial preparation if the
+newer completed session's archive cannot be reached. The original date/hash are
+preserved and the report records the requested date and download failure reason.
+Only the prior three trading-session candidates are searched, and the existing
+seven-day validation still applies. This avoids demanding another upload merely
+because preparation crosses the daily completion cutoff.

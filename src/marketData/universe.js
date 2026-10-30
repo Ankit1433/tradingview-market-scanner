@@ -26,7 +26,13 @@ function parseMcap(csv,date){
   if(!/^[A-Z0-9.&_-]{1,24}$/.test(symbol)||stocks.has(symbol))fail('UPSTOX_METADATA_DUPLICATE_OR_INVALID_SYMBOL');
   // MCAP's documented Market Cap(Rs.) is already INR, never lakh/crore.
   if(![marketCap,issueSize,close].every(x=>Number.isFinite(x)&&x>0)){stocks.set(symbol,{symbol,unavailable:'NSE_MCAP_VALUES_UNAVAILABLE'});continue;}
-  if(Math.abs(marketCap-issueSize*close)/marketCap>.01)fail('UPSTOX_METADATA_VALUE_OR_UNIT_INVALID');
+  const impliedClose=marketCap/issueSize,relativeGap=Math.abs(marketCap-issueSize*close)/marketCap;
+  // The supplied NSE report displays 0.05-grid closes while some market caps
+  // imply paisa prices (e.g. 0.15 vs 0.17). Preserve reported cap, allowing at
+  // most half that displayed grid, plus floating-point noise. The ratio bound
+  // still rejects lakh/crore unit mistakes even at very small prices.
+  const roundedCloseCompatible=Math.abs(impliedClose-close)<=.025+1e-7&&impliedClose/close>=.5&&impliedClose/close<=1.5;
+  if(relativeGap>.01&&!roundedCloseCompatible)fail('UPSTOX_METADATA_VALUE_OR_UNIT_INVALID');
   stocks.set(symbol,{symbol,marketCap,issueSize,referenceClose:close});
  }
  if(!stocks.size)fail('UPSTOX_METADATA_EMPTY');return [...stocks.values()];
@@ -67,7 +73,19 @@ async function loadManifest(provider,{env=process.env,refresh=false,prepare=prep
 }
 async function prepareUniverse(provider,{now=provider.clock(),transport=axios,env=process.env,onProgress=()=>{},signal}={}){
  let date=expectedLast('D',now),report;
- for(let attempt=0;attempt<3;attempt++){try{report=await loadReport(provider,date,{transport});break;}catch(error){if(error.message!=='UPSTOX_METADATA_REPORT_NOT_PUBLISHED'||attempt===2)throw error;do{date=new Date(Date.parse(date+'T00:00:00Z')-DAY).toISOString().slice(0,10);}while(!sessionForDate(date));}}
+ const requestedDate=date;let sourceFailure=null;
+ for(let attempt=0;attempt<3;attempt++){
+  // A manually imported recent report remains usable after the next close,
+  // even if the server cannot download that newer session's archive.
+  const cached=await provider.read('nse-mcap:'+date);
+  if(cached?.sourceDate===date&&Array.isArray(cached.rows)&&cached.sha256){report=sourceFailure?{...cached,fallback:{requestedDate,reason:sourceFailure.message}}:cached;break;}
+  if(!sourceFailure||sourceFailure.message==='UPSTOX_METADATA_REPORT_NOT_PUBLISHED'){
+   try{report=await loadReport(provider,date,{transport});break;}
+   catch(error){if(!['UPSTOX_METADATA_REPORT_NOT_PUBLISHED','UPSTOX_METADATA_SOURCE_UNAVAILABLE','UPSTOX_METADATA_SOURCE_FORBIDDEN'].includes(error.message))throw error;sourceFailure=error;}
+  }
+  do{date=new Date(Date.parse(date+'T00:00:00Z')-DAY).toISOString().slice(0,10);}while(!sessionForDate(date));
+ }
+ if(!report)throw sourceFailure||new Error('UPSTOX_METADATA_SOURCE_UNAVAILABLE');
  const master=await provider.master(),bySymbol=new Map(),scopeExclusions=[];
  for(const item of master.filter(r=>r.segment==='NSE_EQ'&&r.instrument_type==='EQ')){
   const isin=item.isin||item.instrument_key.split('|')[1];
@@ -95,7 +113,7 @@ async function prepareUniverse(provider,{now=provider.clock(),transport=axios,en
  if(signal?.aborted)fail('UPSTOX_PREPARATION_CANCELLED');
  const universeKey=crypto.createHash('sha256').update(JSON.stringify(stocks.map(r=>[r.symbol,r.isin]))).digest('hex');
  const session=sessionForDate(date),asOf=new Date(`${date}T${String(session.close.h).padStart(2,'0')}:${String(session.close.m).padStart(2,'0')}:00+05:30`).toISOString();
- const manifest={version:2,universeKey,source:'NSE daily MCAP (CMTR60423) + Upstox company profile',asOf,generatedAt:provider.clock().toISOString(),scope:'NSE_EQ_EQ_COMPANY',adjustmentPolicy:'provider-native-audited',corporateActionPolicy:'block-structural-actions',report:{url:report.source,sha256:report.sha256,sourceDate:date},coverage:{expected:bySymbol.size,included:stocks.length,excluded,scopeExclusions,complete:excluded.length===0&&stocks.length>0},stocks};
+ const manifest={version:2,universeKey,source:'NSE daily MCAP (CMTR60423) + Upstox company profile',asOf,generatedAt:provider.clock().toISOString(),scope:'NSE_EQ_EQ_COMPANY',adjustmentPolicy:'provider-native-audited',corporateActionPolicy:'block-structural-actions',report:{url:report.source,sha256:report.sha256,sourceDate:date,...(report.fallback?{fallback:report.fallback}:{})},coverage:{expected:bySymbol.size,included:stocks.length,excluded,scopeExclusions,complete:excluded.length===0&&stocks.length>0},stocks};
  // Save incomplete preparation separately, never replace the last valid universe.
  await provider.persist('universe-preparation',{manifest});
  validateManifest(manifest,provider.clock());
