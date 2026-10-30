@@ -16,7 +16,7 @@ before the interval elapses. Startup within the window sends an eligible heartbe
 immediately. Request attempts are spaced even after failure; overlapping heartbeat
 requests are suppressed. `PUSH_URL` and its matching push/API key remain required.
 Weekends remain excluded even if a special weekend trading session is configured.
-The calendar's inherited 2026 dates are still unverified and must be maintained.
+The 2025/2026 equity holidays and known special sessions were checked against official NSE circulars on 30 October 2026. Review CALENDAR.md for sources and the pending November 8 special-session timings.
 
 This controls **keepalive traffic**, not legitimate signal/position/evidence pushes,
 user visits or other background jobs. It does not force Render to sleep, guarantee

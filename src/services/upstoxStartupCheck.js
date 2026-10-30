@@ -11,7 +11,7 @@ function runCheck({env=process.env,execute=execFile,log=console.log}={}) {
       if(error){
         const line=String(stderr||'').trim().split(/\r?\n/).at(-1);
         let failure;
-        try{const parsed=JSON.parse(line);failure=require('../operations/failureDetails').details({message:parsed.code},parsed.stage);}catch(_){failure=require('../operations/failureDetails').details({message:line},'configuration');}
+        try{const parsed=JSON.parse(line);failure=require('../operations/failureDetails').details({message:parsed.code,previousSession:parsed.previousSession,expectedSession:parsed.expectedSession,actualSession:parsed.actualSession},parsed.stage);}catch(_){failure=require('../operations/failureDetails').details({message:line},'configuration');}
         if(failure.code==='OPERATION_FAILED')failure.code='UPSTOX_CONNECTIVITY_CHECK_FAILED';
         log('[upstox-check] '+JSON.stringify({authenticated:false,...failure}));
         resolve('failed');return;

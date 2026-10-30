@@ -265,7 +265,7 @@ The intraday backtest replays bars for manually configured symbols; it cannot re
 
 1. TradingView screener and chart access use undocumented interfaces. Upstream changes and host/IP restrictions can break data access.
 2. Daily stock/index analysis, position management, and backfill now filter completed sessions using one IST cutoff (default 15:45). Scheduled swing scans default to 15:45 and use the shared trading calendar.
-3. Calendar dates require annual official verification. The inherited 2026 list is explicitly unverified; missing years warn and fall back to weekends plus available calendar data.
+3. Calendar dates require annual official verification. The 2025/2026 lists and known special sessions were checked against official NSE circulars on 30 October 2026; see CALENDAR.md for the pending November 8 timings. Missing years or an expired verification horizon warn and use available calendar data.
 4. Swing position management is periodic and close-based. It cannot simulate intraday stop execution accurately or protect a real broker position.
 5. Both schedulers and market status use the shared NSE calendar. Special sessions require explicit overrides.
 6. Memory-held rate limits, SSE clients, scan state, and push queues are process-local. Multiple replicas are not coordinated through a shared scheduler or event bus.

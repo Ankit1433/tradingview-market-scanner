@@ -227,7 +227,7 @@ KEEPALIVE_INTERVAL_MS=480000
 Keep its Supabase settings and machine key configured, then run `npm start`. Leave
 this process/machine running during scans. Do not start a second scanner against the
 same state. Verify the exchange calendar in `src/config/nseCalendar.js`; current
-inherited dates are unverified. Intraday runs during the session; swing defaults to
+2025/2026 holidays and known sessions have been checked against official NSE circulars; see CALENDAR.md for the remaining November 8 session timing review. Intraday runs during the session; swing defaults to
 a completed daily scan after 15:45 IST. Avoid TEST_MODE against real alert users.
 
 Open the hosted `/app` and confirm scanner contact, fresh universe data and provider
@@ -381,3 +381,12 @@ allowlisted code and, for alert worker errors, HTTP status / known database
 resource. Calendar warnings no longer hide the Upstox subprocess failure code.
 Identical alert-worker failures are logged at most once per minute until recovery.
 No raw exceptions, Telegram URLs, provider response bodies or secrets are logged.
+
+## Telegram polling timeouts
+
+`telegram_poll` with `ETIMEDOUT` indicates an outbound connection timeout, not
+proof of an invalid token. A failed poll is now isolated so discovery, monitoring
+and queued delivery are still attempted with their normal per-chat throttles.
+This does not repair the host-to-Telegram network: send requests may also fail.
+There is no automatic token rotation or endpoint/proxy substitution. A linked
+account proves an earlier link was consumed, not current transport connectivity.

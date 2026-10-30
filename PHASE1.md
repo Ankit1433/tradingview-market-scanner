@@ -8,7 +8,7 @@ Eligible signals have a valid timestamp, intraday/swing mode, and finite positiv
 
 Risk is recorded entry minus recorded stop. Recorded targets take precedence. Missing targets are explicitly derived as entry +10 points intraday or entry +2.5R swing. These are signal-level measurements, not a claim that the live sizing engine opened a position at these levels.
 
-Intraday evaluation begins at the next 5-minute bar strictly after the signal timestamp, excluding the bar containing the signal. It ends at the session close. Swing evaluation begins in the next trading session and measures +1/+3/+5 session closes. Complete OHLC bars only are used. The calendar comes from Phase 0; its 2026 dates remain unverified.
+Intraday evaluation begins at the next 5-minute bar strictly after the signal timestamp, excluding the bar containing the signal. It ends at the session close. Swing evaluation begins in the next trading session and measures +1/+3/+5 session closes. Complete OHLC bars only are used. The calendar comes from Phase 0; its 2025/2026 dates and known sessions were checked against official NSE circulars; see CALENDAR.md for the verification horizon.
 
 If stop and target are touched in one bar, stop wins. Fills use the modeled level even across gaps: no gap slippage is modeled. The first-touch result is -1R or target R. If neither level is hit, result R is the final horizon close return. First-touch scanning ends at EOD or +5 sessions. MFE/MAE are positive magnitudes in R over the full horizon, including price movement after a hypothetical exit. Horizon returns likewise continue after first touch. Intrabar excursion ordering is not inferred.
 

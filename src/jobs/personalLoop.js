@@ -47,14 +47,16 @@ async function start(){if(running)return;if(!db.status().connected)throw new Err
  botLease=await require('../marketData/ownership').acquire({key:'ankquant-telegram-worker',onLost:()=>{running=false;clearTimeout(timer);console.error('[alerts] Telegram ownership lost; worker stopped');}});
  try{offset=(await db.loadState('telegram-update-offset'))?.payload?.offset||0;}catch(error){await botLease.stop();throw error;}
  running=true;sharedDelivery=createDelivery({accounts:store,send:telegram,canSend:()=>running});alerts=require('./alertLoop').createAlerts({accounts:store,db,deliver:sharedDelivery});
- let lastEvaluation=0,lastFailure=null,lastWarningAt=0;
- async function tick(){let stage='telegram_poll';active=(async()=>{
-  await poll();
-  if(process.env.SIGNAL_ALERTS_ENABLED!=='false'){stage='signal_discovery';await alerts.discover();stage='scanner_monitor';await alerts.monitor();}
-  if(Date.now()-lastEvaluation>60000){stage='paper_evaluation';await evaluateOpen();lastEvaluation=Date.now();}
-  stage='paper_delivery';await deliver();
-  stage='alert_delivery';await alerts.drain();
- })();try{await active;lastFailure=null;}catch(error){const failure=require('../operations/failureDetails').details(error,stage),key=JSON.stringify(failure);if(key!==lastFailure||Date.now()-lastWarningAt>=60000){console.warn('[alerts] '+key);lastFailure=key;lastWarningAt=Date.now();}}finally{active=null;if(running){timer=setTimeout(tick,5000);timer.unref?.();}}}tick();}
+ let lastEvaluation=0;const warnings=new Map();
+ function report(error,stage){const failure=require('../operations/failureDetails').details(error,stage),key=JSON.stringify(failure),last=warnings.get(stage);if(last?.key!==key||Date.now()-last.at>=60000){console.warn('[alerts] '+key);warnings.set(stage,{key,at:Date.now()});}}
+ async function tick(){const steps=[['telegram_poll',poll]];
+  if(process.env.SIGNAL_ALERTS_ENABLED!=='false')steps.push(['signal_discovery',()=>alerts.discover()],['scanner_monitor',()=>alerts.monitor()]);
+  if(Date.now()-lastEvaluation>60000)steps.push(['paper_evaluation',async()=>{lastEvaluation=Date.now();await evaluateOpen();}]);
+  steps.push(['paper_delivery',()=>deliver()],['alert_delivery',()=>alerts.drain()]);
+  active=require('./personalCycle').runSteps(steps,report,()=>running);
+  try{if(await active)warnings.clear();}finally{active=null;if(running){timer=setTimeout(tick,5000);timer.unref?.();}}
+ }tick();}
+
 async function stop(){running=false;clearTimeout(timer);if(active)await active.catch(()=>{});await botLease?.stop();}
 
 module.exports={start,stop,linkMessage,evaluateOpen,deliver};

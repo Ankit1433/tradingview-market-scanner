@@ -69,7 +69,7 @@ class UpstoxProvider {
   if(!daily&&bars.length){for(let i=1;i<bars.length;i++){const a=nowIST(new Date(bars[i-1].time*1000)).dateKey,b=nowIST(new Date(bars[i].time*1000)).dateKey;if(a===b&&bars[i].time-bars[i-1].time!==300){this.health.lastError='CANDLE_GAP';throw new Error('UPSTOX_CANDLE_GAP');}}}
   if(!bars.length)throw new Error('UPSTOX_NO_COMPLETED_CANDLES');
   if(item.segment==='NSE_EQ' && bars.some(b=>!Number.isFinite(b.volume)))throw new Error('UPSTOX_EQUITY_VOLUME_MISSING');
-  if(daily){for(let i=1;i<bars.length;i++){const a=nowIST(new Date(bars[i-1].time*1000)).dateKey,b=nowIST(new Date(bars[i].time*1000)).dateKey;if(nextTradingDay(a)!==b)throw new Error('UPSTOX_DAILY_CANDLE_GAP');}}
+  if(daily){for(let i=1;i<bars.length;i++){const a=nowIST(new Date(bars[i-1].time*1000)).dateKey,b=nowIST(new Date(bars[i].time*1000)).dateKey;const expected=nextTradingDay(a);if(expected!==b)throw Object.assign(new Error('UPSTOX_DAILY_CANDLE_GAP'),{previousSession:a,expectedSession:expected,actualSession:b});}}
 
   assertFresh(bars,interval,now,this.publicationDelay);
   await this.persist(key,{provider:'upstox',adjustmentPolicy:'unverified-provider-native',fetchedAt:now.getTime(),bars:bars.slice(-10000)});return bars.slice(-nBars).map(b=>({...b}));

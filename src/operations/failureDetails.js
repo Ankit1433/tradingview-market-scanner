@@ -11,6 +11,7 @@ function details(error,stage){
  if(['ETIMEDOUT','ECONNABORTED','ECONNRESET','ENOTFOUND','EAI_AGAIN','ECONNREFUSED'].includes(error?.code))result.code=error.code;
  const db=/^Supabase ([a-z_/]+) request failed \(HTTP ([45]\d\d)\)$/.exec(message);
  if(db&&resources.has(db[1])){result.code='DATABASE_REQUEST_FAILED';result.resource=db[1];result.httpStatus=Number(db[2]);}
+ if(result.code==='UPSTOX_DAILY_CANDLE_GAP')for(const key of ['previousSession','expectedSession','actualSession'])if(typeof error?.[key]==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(error[key]))result[key]=error[key];
  return result;
 }
 module.exports={details};

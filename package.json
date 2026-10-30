@@ -13,7 +13,7 @@
     "test:swing-backfill": "node test-swing-backfill.js",
     "test:api": "node test-api.js",
     "test:signal-consistency": "node test-signal-consistency.js",
-    "test": "node test-swing.js && node test-swing-backfill.js && node test-api.js && node test-ingest.js && node test-signal-consistency.js && node test-phase0.js && node test-evidence.js && node test-ui.js && node test-personal.js && node test-phase5.js && node test-keepalive.js && node test-upstox.js && node test-alerts.js && node test-reliability.js && node test-bootstrap.js && node test-upstox-startup.js && node test-diagnostics.js && node tests/contracts/api.js",
+    "test": "node test-swing.js && node test-swing-backfill.js && node test-api.js && node test-ingest.js && node test-signal-consistency.js && node test-phase0.js && node test-evidence.js && node test-ui.js && node test-personal.js && node test-phase5.js && node test-keepalive.js && node test-upstox.js && node test-alerts.js && node test-reliability.js && node test-bootstrap.js && node test-upstox-startup.js && node test-diagnostics.js && node test-market-recovery.js && node tests/contracts/api.js",
     "test:ingest": "node test-ingest.js",
     "test:phase0": "node test-phase0.js",
     "test:evidence": "node test-evidence.js",

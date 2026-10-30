@@ -5,11 +5,12 @@ const warned = new Set();
 function calendarInfo(dateKey) {
   const year = Number(dateKey.slice(0, 4));
   const config = years[year];
-  if ((!config || !config.verified) && !warned.has(year)) {
+  const stale = !config || Boolean(config.verifiedThrough && dateKey > config.verifiedThrough);
+  if ((stale || !config.verified) && !warned.has(year)) {
     warned.add(year);
-    console.warn(`[calendar] NSE calendar ${year} ${config ? 'unverified' : 'missing/stale'}; verify exchange holidays before relying on schedules`);
+    console.warn(`[calendar] NSE calendar ${year} ${stale ? 'missing/stale' : 'unverified'}; verify exchange holidays before relying on schedules`);
   }
-  return { config, stale: !config, year };
+  return { config, stale, year };
 }
 function isHoliday(dateKey) {
   return Boolean(calendarInfo(dateKey).config?.holidays.includes(dateKey));
