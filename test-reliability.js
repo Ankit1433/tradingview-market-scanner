@@ -3,6 +3,7 @@ const assert=require('node:assert/strict'),fs=require('fs'),crypto=require('cryp
 const {validate}=require('./src/config/validate'),log=require('./src/operations/log');
 const db=require('./src/services/supabaseStore');const journal=require('./src/state/signalJournal');
 async function main(){
+ assert(validate({NODE_ENV:"production",PRIVATE_MODE:"true",APP_ORIGIN:"https://ankquant.example",CORS_ORIGIN:"https://ankquant.example"}));
  assert(validate({}));for(const env of [{ENABLE_SWING:'yes'},{PORT:'NaN'},{PUSH_URL:'https://test.example'},{SUPABASE_URL:'https://db.example'},{APP_ORIGIN:'https://test.example/app'},{NODE_ENV:'production',PRIVATE_MODE:'true'},{MARKET_DATA_PROVIDER:'upstox'}])assert.throws(()=>validate(env));
  assert.equal(log.clean({token:'secret',password:'secret',email:'private',nested:{Authorization:'Bearer abc'},message:'https://example.com?secret=value'}).token,'[REDACTED]');assert(!JSON.stringify(log.clean({error:new Error('secret')})).includes('secret'));
  fs.rmSync(process.env.SWING_DATA_DIR,{recursive:true,force:true});journal.reset();const record=journal.normalizeRecord({ts:'2026-10-28T06:00:00Z',symbol:'TEST',mode:'intraday',signals:['PULLBACK'],price:100});
@@ -19,6 +20,7 @@ async function main(){
  const child=require('child_process').spawn(process.execPath,['src/index.js'],{env:{...process.env,PORT:String(port),NODE_ENV:'development',PRIVATE_MODE:'false',API_KEY:'reliability-child-key',MARKET_DATA_PROVIDER:'tradingview',INGEST_MODE:'true',ENABLE_INTRADAY:'false',ENABLE_SWING:'false',ENABLE_OUTCOMES:'false',ENABLE_PERSONAL_WORKER:'false',SUPABASE_URL:'',SUPABASE_SECRET_KEY:'',SUPABASE_SERVICE_ROLE_KEY:'',PUSH_URL:'',SWING_DATA_DIR:'/tmp/ankquant-shutdown-check'},stdio:['ignore','pipe','pipe']});
  let output='';const exited=new Promise(resolve=>child.once('exit',(code,signal)=>resolve({code,signal})));const deadline=setTimeout(()=>child.kill('SIGKILL'),7000);
  try{await new Promise((resolve,reject)=>{child.stdout.on('data',data=>{output+=data.toString();if(output.includes('API listening'))resolve();});child.once('exit',()=>reject(Error('Application exited before readiness')));});
+ assert.equal((await fetch(`http://127.0.0.1:${port}/healthz`)).status,200);
  const response=await fetch(`http://127.0.0.1:${port}/api/admin/metrics`,{headers:{'x-api-key':'reliability-child-key'}});assert.equal(response.status,200);const metrics=await response.json();assert.equal(typeof metrics.uptimeSeconds,'number');assert.equal((await fetch(`http://127.0.0.1:${port}/api/admin/metrics`)).status,401);
  child.kill('SIGTERM');assert.equal((await exited).code,0);
  }finally{clearTimeout(deadline);if(child.exitCode===null)child.kill('SIGKILL');}

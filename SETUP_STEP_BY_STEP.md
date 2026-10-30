@@ -9,7 +9,7 @@ inviting friends. No broker orders are placed.
 ## 1. Get the committed code and install
 
 Open a terminal in your repository folder. Use Node matching `.node-version` if
-available; `package.json` requires Node 18 or newer.
+available; `package.json` requires Node 22 or newer; the production Docker image uses Node 24.
 
 ```bash
 git switch phase8-upstox
@@ -336,3 +336,11 @@ cutover remain. Back up your Supabase project and stage migrations. Signal-only 
 Useful guides: PHASE1.md, PERSONAL_JOURNAL.md, PHASE3.md, PHASE5.md, KEEPALIVE.md,
 UPSTOX_MIGRATION.md, ARCHITECTURE.md and FUTURE_ARCHITECTURE.md. The future diagram
 is a target design, not a claim that all phases are deployed.
+
+## Docker startup troubleshooting
+
+For `APP_ORIGIN is required for private production hosting`, set `APP_ORIGIN` and
+`CORS_ORIGIN` in Render Environment to the exact HTTPS browser origin (no path),
+then save and redeploy. Keep private mode enabled. Docker services use the Node
+version in Dockerfile, not Render native-runtime Node settings. The image includes
+`scripts/` for admin bootstrap and uses `/healthz` for unauthenticated liveness.
