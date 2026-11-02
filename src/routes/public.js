@@ -260,12 +260,12 @@ router.get('/candles/:symbol', async (req, res) => {
     if (candleRequests.size >= MAX_CANDLE_REQUESTS) {
       return res.status(503).json({ error: 'Candle service is busy. Try again shortly.' });
     }
-    pending = getHist(
+    pending = Promise.resolve().then(()=>getHist(
       symbol,
       'NSE',
       interval === '1d' ? INTERVAL.IN_DAILY : INTERVAL.IN_5_MINUTE,
       requestedBars,
-    ).then((candles) => {
+    )).then((candles) => {
       if (!Array.isArray(candles) || candles.length === 0) return null;
       const clean = candles.filter((candle) =>
         ['time', 'open', 'high', 'low', 'close'].every((key) =>
@@ -280,7 +280,12 @@ router.get('/candles/:symbol', async (req, res) => {
     candleRequests.set(cacheKey, pending);
   }
 
-  const candles = await pending;
+  let candles;
+  try { candles = await pending; } catch (error) {
+    const limited=error?.message==='UPSTOX_RETRY_WAIT_EXCEEDED';
+    if(limited)res.set('Retry-After','60');
+    return res.status(503).json({error:limited?'Candle provider is rate limited. Try again later.':'Candle provider is unavailable. Try again later.',code:limited?'UPSTOX_RETRY_WAIT_EXCEEDED':'CANDLE_PROVIDER_UNAVAILABLE'});
+  }
   if (!candles) return res.status(502).json({ error: `No ${interval} candles are available for ${symbol}.` });
   return res.json({ symbol, interval, count: candles.length, candles, cached: false });
 });

@@ -581,3 +581,5 @@ Worker verification: `npm run test:workers` covers real scheduler execution with
 Admins can opt into explicitly labelled unverified paper scanning via the saved checkbox in Upstox setup, and revoke it later. Only screener comparison is optional; sourced-universe validation, fresh candles, corporate-action quarantine and worker ownership remain enforced. See [the setup instructions](UPSTOX_DATA_SETUP.md#optional-unverified-paper-scanning). No new migration is required.
 
 Calendar status exposes verification horizon, pending special sessions and source in `holidayCalendar`; `holidayDataVerified` becomes false once the horizon expires. See [CALENDAR.md](CALENDAR.md) for the pending November 8 timing verification and source limitations.
+
+Candle API upstream failures return a sanitized HTTP 503 rather than escaping the Express 4 async handler. Long Upstox Retry-After rejections remain bounded and return `UPSTOX_RETRY_WAIT_EXCEEDED`; pending request slots are released so later reads can recover. No environment or SQL changes are required.
