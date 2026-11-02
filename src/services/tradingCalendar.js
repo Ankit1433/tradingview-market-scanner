@@ -6,11 +6,14 @@ function calendarInfo(dateKey) {
   const year = Number(dateKey.slice(0, 4));
   const config = years[year];
   const stale = !config || Boolean(config.verifiedThrough && dateKey > config.verifiedThrough);
-  if ((stale || !config.verified) && !warned.has(year)) {
-    warned.add(year);
-    console.warn(`[calendar] NSE calendar ${year} ${stale ? 'missing/stale' : 'unverified'}; verify exchange holidays before relying on schedules`);
+  const reason=!config?'missing-year':!config.verified?'unverified-source':stale?'verification-horizon-expired':null;
+  const warningKey=`${year}:${reason}`;
+  if (reason && !warned.has(warningKey)) {
+    warned.add(warningKey);
+    console.warn(`[calendar] NSE calendar ${year} ${reason}; verify exchange holidays before relying on schedules`);
   }
-  return { config, stale, year };
+  return { config, stale, year, verified:Boolean(config?.verified&&!stale), reason };
+
 }
 function isHoliday(dateKey) {
   return Boolean(calendarInfo(dateKey).config?.holidays.includes(dateKey));

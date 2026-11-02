@@ -579,3 +579,5 @@ Screener/corporate-action review now covers all 14 numeric comparison fields plu
 Worker verification: `npm run test:workers` covers real scheduler execution with fixture data. Admins can inspect process-local activity at `/api/account/admin/workers` after deployment. See [WORKER_VERIFICATION.md](WORKER_VERIFICATION.md) for the distinction between ticks, scan activity and live production verification.
 
 Admins can opt into explicitly labelled unverified paper scanning via the saved checkbox in Upstox setup, and revoke it later. Only screener comparison is optional; sourced-universe validation, fresh candles, corporate-action quarantine and worker ownership remain enforced. See [the setup instructions](UPSTOX_DATA_SETUP.md#optional-unverified-paper-scanning). No new migration is required.
+
+Calendar status exposes verification horizon, pending special sessions and source in `holidayCalendar`; `holidayDataVerified` becomes false once the horizon expires. See [CALENDAR.md](CALENDAR.md) for the pending November 8 timing verification and source limitations.

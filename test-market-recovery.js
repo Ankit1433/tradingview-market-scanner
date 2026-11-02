@@ -11,6 +11,12 @@ const {details}=require('./src/operations/failureDetails');
  for(const date of ['2026-01-15','2026-03-26','2026-03-31','2026-06-26','2026-11-10','2025-11-05','2025-12-25'])assert.equal(sessionForDate(date),null,date);
  assert(sessionForDate('2026-11-09'));assert.equal(nextTradingDay('2025-12-24'),'2025-12-26');assert.equal(nextTradingDay('2026-05-27'),'2026-05-29');
  assert.equal(sessionForDate('2025-02-01').open.h,9);assert.equal(sessionForDate('2025-10-21').open.h,13);assert.equal(sessionForDate('2026-02-01').close.m,30);assert.equal(nextTradingDay('2026-01-30'),'2026-02-01');assert(!calendarInfo('2026-10-30').stale);
+ const {getMarketStatus}=require('./src/services/marketStatus');
+ const before=getMarketStatus(new Date('2026-11-07T12:00:00+05:30'));assert.equal(before.holidayDataVerified,true);assert.equal(before.holidayDataStale,false);assert.deepEqual(before.holidayCalendar.pendingSpecialSessions,['2026-11-08']);
+ const after=getMarketStatus(new Date('2026-11-09T12:00:00+05:30'));assert.equal(after.holidayDataVerified,false);assert.equal(after.holidayDataStale,true);assert.equal(after.holidayCalendar.reason,'verification-horizon-expired');
+ const unknown=getMarketStatus(new Date('2027-01-04T12:00:00+05:30'));assert.equal(unknown.holidayDataVerified,false);assert.equal(unknown.holidayCalendar.reason,'missing-year');
+ // A special evening/afternoon session must not give the next ordinary day its hours.
+ const muhuratClose=getMarketStatus(new Date('2025-10-21T16:00:00+05:30'));assert.equal(muhuratClose.nextOpen.date,'2025-10-23');assert.equal(muhuratClose.nextOpen.time,'09:15');
  const directory=fs.mkdtempSync(path.join(os.tmpdir(),'ankquant-calendar-gap-'));
  try{
   let dates=['2026-05-27','2026-05-29'];

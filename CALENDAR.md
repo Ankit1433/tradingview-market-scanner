@@ -31,3 +31,9 @@ to warn and use the existing weekday fallback.
 The 2025 Muhurat completion override uses 15 minutes after the normal session
 close; that delay is application policy. Keepalive still excludes every weekend
 and configured holiday, even when there is a special trading session, as requested.
+
+## Status corrections — 2 November 2026
+
+Market status now marks `holidayDataVerified:false` after the configured verification horizon, exposes the horizon, official source, pending special dates and reason in `holidayCalendar`, and uses the next session's opening time for `nextOpen`. Warning deduplication distinguishes an unverified source, a missing year and an expired horizon. Existing holiday and scheduler behavior is retained; no special-session timings are inferred.
+
+Official NSE web access was blocked by the execution environment's enforced outbound policy during this update. The existing circular references above have not been newly fetched or extended. In particular, November 8 Muhurat hours remain pending. To complete annual verification, obtain the official Capital Market timing circular, add its session open/close and application completion delay to `src/config/nseCalendar.js`, cite its source, clear that pending date and extend `verifiedThrough` only as supported by the circulars. Do not silence warnings by merely changing `verified:true` or the horizon.

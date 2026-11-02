@@ -51,10 +51,11 @@ function getMarketStatus(now = new Date()) {
       nextOpen = { date: dateKey, time: fmt(session?.open || C.MARKET_OPEN) };
     } else {
       const next = nextTradingDay(dateKey);
-      nextOpen = next ? { date: next, time: fmt(session?.open || C.MARKET_OPEN) } : null;
+      nextOpen = next ? { date: next, time: fmt(sessionForDate(next)?.open || C.MARKET_OPEN) } : null;
     }
   }
 
+  const calendar=calendarInfo(dateKey);
   return {
     isOpen,
     phase,
@@ -72,8 +73,9 @@ function getMarketStatus(now = new Date()) {
     // Surfaced rather than hidden: if the holiday list is stale, every
     // consumer should be able to tell.
     holidayDataYear: Math.max(...Object.keys(require('../config/nseCalendar')).map(Number)),
-    holidayDataStale: calendarInfo(dateKey).stale,
-    holidayDataVerified: Boolean(calendarInfo(dateKey).config?.verified),
+    holidayDataStale: calendar.stale,
+    holidayDataVerified: calendar.verified,
+    holidayCalendar: {year:calendar.year,verifiedThrough:calendar.config?.verifiedThrough||null,checkedAt:calendar.config?.checkedAt||null,source:calendar.config?.source||null,reason:calendar.reason,pendingSpecialSessions:calendar.config?.pendingSpecialSessions||[],policy:'Unknown years use weekday fallback; pending special-session times are not guessed'},
   };
 }
 
